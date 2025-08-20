@@ -1,20 +1,29 @@
-// src/components/layout/MainLayout.js - Med utloggning och användarinfo
-import React, { useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+// src/components/layout/MainLayout.js - Responsive layout with SKARP branding
+import React, { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const MainLayout = () => {
+  const { currentUser, userProfile, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const location = useLocation();
-  const { currentUser, userProfile, logout } = useAuth();
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const navigationItems = [
     {
       path: '/',
       label: 'Dashboard',
       icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="3" y="3" width="7" height="7"/>
           <rect x="14" y="3" width="7" height="7"/>
           <rect x="14" y="14" width="7" height="7"/>
@@ -26,7 +35,7 @@ const MainLayout = () => {
       path: '/customers',
       label: 'Kunder',
       icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
           <circle cx="12" cy="7" r="4"/>
         </svg>
@@ -36,30 +45,16 @@ const MainLayout = () => {
       path: '/templates',
       label: 'Mallar',
       icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14,2 14,8 20,8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
         </svg>
       )
-    },
-    {
-      path: '/supabase-test',
-      label: 'Test',
-      icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
-        </svg>
-      ),
-      isTest: true
     }
   ];
 
   const isActive = (path) => {
-    if (path === '/') {
-      return location.pathname === '/';
-    }
+    if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
@@ -67,6 +62,8 @@ const MainLayout = () => {
     try {
       await logout();
       setUserMenuOpen(false);
+      setMobileMenuOpen(false);
+      navigate('/auth');
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -77,78 +74,445 @@ const MainLayout = () => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Determine if sidebar should be shown - Simplified: only desktop or mobile
+  const showSidebar = windowWidth > 1024;
+  const showMobileHeader = windowWidth <= 1024; // Changed from 768 to 1024
+
   return (
-    <div className="app-layout">
-      {/* Desktop Sidebar - endast ikoner */}
-      <aside className="desktop-sidebar">
-        {/* Logo */}
-        <div className="sidebar-logo">
-          <div className="logo-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor"/>
-              <path d="M8 12h8M12 8v8" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-background)' }}>
+      {/* Desktop Sidebar - Full Width */}
+      {showSidebar && (
+        <aside 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            height: '100vh',
+            width: '280px',
+            background: 'var(--color-surface)',
+            borderRight: '1px solid var(--color-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: 1000,
+            transition: 'all var(--transition-normal)'
+          }}
+        >
+          {/* Logo Section */}
+          <div style={{ padding: 'var(--space-xl)', borderBottom: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+              <div 
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))',
+                  borderRadius: 'var(--radius-lg)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'var(--font-weight-bold)',
+                  fontSize: '1.25rem',
+                  boxShadow: '0 4px 12px rgba(0, 102, 204, 0.3)'
+                }}
+              >
+                SK
+              </div>
+              <div>
+                <h1 style={{ 
+                  color: 'var(--color-text-primary)', 
+                  fontSize: 'var(--font-size-lg)', 
+                  fontWeight: 'var(--font-weight-bold)', 
+                  margin: 0,
+                  lineHeight: 1.2
+                }}>
+                  SKARP
+                </h1>
+                <p style={{ 
+                  color: 'var(--color-text-muted)', 
+                  fontSize: 'var(--font-size-xs)', 
+                  margin: 0,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Kontrollsystem
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Navigation */}
-        <nav className="desktop-nav">
-          {navigationItems.map((item) => (
-            <Link 
-              key={item.path}
-              to={item.path}
-              className={`desktop-nav-link ${isActive(item.path) ? 'active' : ''} ${item.isTest ? 'test-link' : ''}`}
-              title={item.label}
+          {/* Navigation */}
+          <nav style={{ flex: 1, padding: 'var(--space-lg) 0' }}>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {navigationItems.map((item) => (
+                <li key={item.path} style={{ marginBottom: 'var(--space-xs)' }}>
+                  <Link 
+                    to={item.path}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-md)',
+                      padding: 'var(--space-md) var(--space-xl)',
+                      color: isActive(item.path) ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                      textDecoration: 'none',
+                      fontWeight: isActive(item.path) ? 'var(--font-weight-semibold)' : 'var(--font-weight-medium)',
+                      fontSize: 'var(--font-size-base)',
+                      transition: 'all var(--transition-normal)',
+                      borderRadius: 'var(--radius-md)',
+                      margin: '0 var(--space-md)',
+                      background: isActive(item.path) ? 'var(--color-primary-alpha)' : 'transparent',
+                      border: isActive(item.path) ? '1px solid var(--color-primary)' : '1px solid transparent'
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      {item.icon}
+                    </span>
+                    <span>{item.label}</span>
+                    {isActive(item.path) && (
+                      <div 
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          background: 'var(--color-primary)',
+                          borderRadius: '50%',
+                          marginLeft: 'auto'
+                        }}
+                      />
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* User Section with Logout Button */}
+          <div style={{ 
+            padding: 'var(--space-lg) var(--space-xl)', 
+            borderTop: '1px solid var(--color-border)',
+            background: 'var(--color-surface-hover)'
+          }}>
+            {/* Logout Button */}
+            <button 
+              onClick={handleLogout}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-md)',
+                width: '100%',
+                padding: 'var(--space-md)',
+                marginBottom: 'var(--space-md)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-danger)',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--font-weight-medium)',
+                transition: 'all var(--transition-normal)'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'var(--color-danger-alpha)';
+                e.target.style.borderColor = 'var(--color-danger)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'var(--color-surface)';
+                e.target.style.borderColor = 'var(--color-border)';
+              }}
             >
-              {item.icon}
-              {isActive(item.path) && <div className="active-dot" />}
-            </Link>
-          ))}
-        </nav>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16,17 21,12 16,7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Logga ut
+            </button>
 
-        {/* User section */}
-        <div className="desktop-user">
-          <div 
-            className="user-avatar" 
-            title="Profil & Abonnemang"
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-          >
-            <span>{getInitials(userProfile?.contactPerson || currentUser?.displayName)}</span>
-            {userProfile?.subscription?.plan === 'professional' && (
-              <div className="subscription-indicator professional">
-                <span>Pro</span>
+            {/* User Profile */}
+            <div 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-md)',
+                padding: 'var(--space-md)',
+                background: 'var(--color-surface)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--color-border)',
+                cursor: 'pointer',
+                transition: 'all var(--transition-normal)'
+              }}
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+            >
+              <div 
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  background: 'var(--color-primary)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-background)',
+                  fontWeight: 'var(--font-weight-bold)',
+                  fontSize: 'var(--font-size-sm)'
+                }}
+              >
+                {getInitials(userProfile?.contactPerson || currentUser?.displayName)}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  color: 'var(--color-text-primary)', 
+                  fontWeight: 'var(--font-weight-semibold)',
+                  fontSize: 'var(--font-size-sm)',
+                  lineHeight: 1.2
+                }}>
+                  {userProfile?.contactPerson || currentUser?.displayName || 'Användare'}
+                </div>
+                <div style={{ 
+                  color: 'var(--color-text-muted)', 
+                  fontSize: 'var(--font-size-xs)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  {userProfile?.subscription?.plan === 'professional' ? 'Professional' : 'Gratis'}
+                </div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6,9 12,15 18,9"/>
+              </svg>
+            </div>
+
+            {/* User Dropdown Menu - Only Subscription now */}
+            {userMenuOpen && (
+              <div 
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 'var(--space-xl)',
+                  right: 'var(--space-xl)',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  boxShadow: 'var(--shadow-xl)',
+                  marginBottom: 'var(--space-md)',
+                  zIndex: 1100
+                }}
+              >
+                <div style={{ padding: 'var(--space-sm) 0' }}>
+                  <Link 
+                    to="/subscription"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-md)',
+                      padding: 'var(--space-md) var(--space-lg)',
+                      color: 'var(--color-text-secondary)',
+                      textDecoration: 'none',
+                      fontSize: 'var(--font-size-sm)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      transition: 'all var(--transition-normal)'
+                    }}
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="m12 1 1.84 3.68L18 5.84l-1.16 3.84L20 12l-3.16 2.32L18 18.16l-3.84-1.16L12 23l-2.32-3.16L5.84 18l1.16-3.84L4 12l3.16-2.32L5.84 5.84l3.84 1.16z"/>
+                    </svg>
+                    Abonnemang
+                  </Link>
+                </div>
               </div>
             )}
           </div>
+        </aside>
+      )}
+
+      {/* Remove the collapsed sidebar completely since we're using mobile menu instead */}
+
+      {/* Mobile Header */}
+      {showMobileHeader && (
+        <header 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '70px',
+            background: 'var(--color-surface)',
+            borderBottom: '1px solid var(--color-border)',
+            zIndex: 1001
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            height: '100%',
+            padding: '0 var(--space-lg)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+              <div 
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'var(--font-weight-bold)',
+                  fontSize: 'var(--font-size-sm)',
+                  boxShadow: '0 2px 8px rgba(0, 102, 204, 0.3)'
+                }}
+              >
+                SK
+              </div>
+              <span style={{ 
+                color: 'var(--color-text-primary)', 
+                fontWeight: 'var(--font-weight-semibold)',
+                fontSize: 'var(--font-size-lg)'
+              }}>
+                SKARP
+              </span>
+            </div>
+            
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              style={{
+                background: 'var(--color-surface-hover)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+                width: '44px',
+                height: '44px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all var(--transition-normal)'
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {mobileMenuOpen ? (
+                  <>
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </>
+                ) : (
+                  <>
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                  </>
+                )}
+              </svg>
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* Mobile Menu */}
+      {showMobileHeader && mobileMenuOpen && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: '70px',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'var(--color-surface)',
+            borderTop: '1px solid var(--color-border)',
+            zIndex: 1000,
+            overflow: 'auto'
+          }}
+        >
+          <nav style={{ padding: 'var(--space-xl) var(--space-lg)' }}>
+            {navigationItems.map((item) => (
+              <Link 
+                key={item.path}
+                to={item.path}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-md)',
+                  padding: 'var(--space-lg)',
+                  marginBottom: 'var(--space-md)',
+                  background: isActive(item.path) ? 'var(--color-primary)' : 'var(--color-surface-hover)',
+                  color: isActive(item.path) ? 'var(--color-background)' : 'var(--color-text-primary)',
+                  borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${isActive(item.path) ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  fontWeight: isActive(item.path) ? 'var(--font-weight-semibold)' : 'var(--font-weight-medium)',
+                  textDecoration: 'none',
+                  fontSize: 'var(--font-size-base)'
+                }}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            ))}
+          </nav>
           
-          {/* User dropdown menu */}
-          {userMenuOpen && (
-            <div className="user-dropdown">
-              <div className="user-dropdown-header">
-                <div className="user-info">
-                  <span className="user-name">
+          <div style={{ 
+            padding: 'var(--space-lg)', 
+            borderTop: '1px solid var(--color-border)',
+            background: 'var(--color-surface-hover)'
+          }}>
+            <div style={{
+              background: 'var(--color-surface)',
+              padding: 'var(--space-lg)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--color-border)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
+                <div 
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'var(--color-primary)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-background)',
+                    fontWeight: 'var(--font-weight-bold)'
+                  }}
+                >
+                  {getInitials(userProfile?.contactPerson || currentUser?.displayName)}
+                </div>
+                <div>
+                  <div style={{ 
+                    color: 'var(--color-text-primary)', 
+                    fontWeight: 'var(--font-weight-semibold)',
+                    marginBottom: '4px'
+                  }}>
                     {userProfile?.contactPerson || currentUser?.displayName || 'Användare'}
-                  </span>
-                  <span className="user-email">{currentUser?.email}</span>
+                  </div>
+                  <div style={{ 
+                    color: 'var(--color-text-muted)', 
+                    fontSize: 'var(--font-size-xs)'
+                  }}>
+                    {userProfile?.subscription?.plan === 'professional' ? 'Professional Plan' : 'Gratis Plan'}
+                  </div>
                 </div>
               </div>
               
-              <div className="user-dropdown-content">
-                <Link 
-                  to="/subscription" 
-                  className="dropdown-item"
-                  onClick={() => setUserMenuOpen(false)}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="m12 1 1.84 3.68L18 5.84l-1.16 3.84L20 12l-3.16 2.32L18 18.16l-3.84-1.16L12 23l-2.32-3.16L5.84 18l1.16-3.84L4 12l3.16-2.32L5.84 5.84l3.84 1.16z"/>
-                  </svg>
-                  Abonnemang
-                </Link>
-                
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
                 <button 
                   onClick={handleLogout}
-                  className="dropdown-item logout-btn"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-md)',
+                    padding: 'var(--space-md)',
+                    background: 'var(--color-danger-alpha)',
+                    color: 'var(--color-danger)',
+                    border: '1px solid var(--color-danger)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                    fontWeight: 'var(--font-weight-medium)',
+                    justifyContent: 'center',
+                    width: '100%'
+                  }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -159,115 +523,22 @@ const MainLayout = () => {
                 </button>
               </div>
             </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Mobile Header */}
-      <header className="mobile-header">
-        <div className="mobile-header-content">
-          <div className="mobile-logo">
-            <div className="logo-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor"/>
-                <path d="M8 12h8M12 8v8" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <span>Stig Olofssons</span>
-          </div>
-
-          <button 
-            className="mobile-menu-button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Öppna meny"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {mobileMenuOpen ? (
-                <>
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </>
-              ) : (
-                <>
-                  <line x1="3" y1="6" x2="21" y2="6"/>
-                  <line x1="3" y1="12" x2="21" y2="12"/>
-                  <line x1="3" y1="18" x2="21" y2="18"/>
-                </>
-              )}
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      {/* Mobile Menu */}
-      <div className={`mobile-menu ${mobileMenuOpen ? 'open' : ''}`}>
-        <nav className="mobile-nav">
-          {navigationItems.map((item) => (
-            <Link 
-              key={item.path}
-              to={item.path}
-              className={`mobile-nav-link ${isActive(item.path) ? 'active' : ''} ${item.isTest ? 'test-link' : ''}`}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <span className="mobile-nav-icon">{item.icon}</span>
-              <span className="mobile-nav-label">{item.label}</span>
-              {isActive(item.path) && <div className="mobile-active-indicator" />}
-            </Link>
-          ))}
-        </nav>
-        
-        <div className="mobile-user-section">
-          <div className="mobile-user">
-            <div className="user-avatar">
-              <span>{getInitials(userProfile?.contactPerson || currentUser?.displayName)}</span>
-            </div>
-            <div className="user-info">
-              <span className="user-name">
-                {userProfile?.contactPerson || currentUser?.displayName || 'Användare'}
-              </span>
-              <span className="user-role">
-                {userProfile?.subscription?.plan === 'professional' ? 'Professional Plan' : 'Trial'}
-              </span>
-            </div>
-            {userProfile?.subscription?.plan === 'professional' && (
-              <div className="subscription-badge professional">
-                Pro
-              </div>
-            )}
-          </div>
-          
-          <div className="mobile-user-actions">
-            <Link 
-              to="/subscription" 
-              className="mobile-user-action"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="m12 1 1.84 3.68L18 5.84l-1.16 3.84L20 12l-3.16 2.32L18 18.16l-3.84-1.16L12 23l-2.32-3.16L5.84 18l1.16-3.84L4 12l3.16-2.32L5.84 5.84l3.84 1.16z"/>
-              </svg>
-              Abonnemang
-            </Link>
-            
-            <button 
-              onClick={handleLogout}
-              className="mobile-user-action logout-btn"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16,17 21,12 16,7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-              Logga ut
-            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Mobile Overlay */}
-      {mobileMenuOpen && (
+      {/* Overlay for mobile menu */}
+      {showMobileHeader && mobileMenuOpen && (
         <div 
-          className="mobile-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 999
+          }}
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
@@ -275,14 +546,30 @@ const MainLayout = () => {
       {/* User menu overlay för desktop */}
       {userMenuOpen && (
         <div 
-          className="user-menu-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999
+          }}
           onClick={() => setUserMenuOpen(false)}
         />
       )}
 
       {/* Main Content */}
-      <main className="main-content">
-        <div className="content-wrapper">
+      <main 
+        style={{
+          flex: 1,
+          marginLeft: showSidebar ? '280px' : '0',
+          marginTop: showMobileHeader ? '70px' : '0',
+          minHeight: '100vh',
+          background: 'var(--color-background)',
+          transition: 'margin-left var(--transition-normal)'
+        }}
+      >
+        <div style={{ padding: 'var(--space-2xl)' }}>
           <Outlet />
         </div>
       </main>

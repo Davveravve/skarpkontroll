@@ -1,192 +1,319 @@
-// src/utils/pdfGenerator.js
+// src/utils/pdfGenerator.js - Enkel och ren PDF-generator
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Funktion för att generera en besiktnings-PDF
-export const generateInspectionPDF = (inspection, installation, customer, address) => {
-  // Skapa ny PDF med A4-format
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.width;
-  
-  // Konfigurera fonter
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  
-  // Sidhuvud
-  doc.text("Besiktningsprotokoll", pageWidth / 2, 20, { align: "center" });
-  
-  // Logo (om du har en)
-  // doc.addImage(logoUrl, "PNG", 14, 10, 30, 30);
-  
-  // Information om kund och anläggning
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  
-  // Skapa ruta för kundinfo
-  doc.rect(14, 30, pageWidth - 28, 40);
-  doc.setFont("helvetica", "bold");
-  doc.text("Kunduppgifter", 16, 38);
-  doc.setFont("helvetica", "normal");
-  doc.text(`Kund: ${customer?.name || 'Uppgift saknas'}`, 16, 46);
-  doc.text(`Adress: ${address?.street || ''}, ${address?.postalCode || ''} ${address?.city || ''}`, 16, 54);
-  doc.text(`Anläggning: ${installation?.name || 'Uppgift saknas'}`, 16, 62);
-  
-  // Besiktningsinformation
-  doc.rect(14, 75, pageWidth - 28, 20);
-  doc.setFont("helvetica", "bold");
-  doc.text("Besiktningsuppgifter", 16, 83);
-  doc.setFont("helvetica", "normal");
-  
-  const inspectionDate = inspection.createdAt 
-    ? new Date(inspection.createdAt.seconds * 1000).toLocaleDateString() 
-    : 'Okänt datum';
-  const completedDate = inspection.completedAt 
-    ? new Date(inspection.completedAt.seconds * 1000).toLocaleDateString() 
-    : '-';
-  
-  doc.text(`Besiktningsdatum: ${inspectionDate}`, 16, 91);
-  doc.text(`Status: ${inspection.status === 'completed' ? 'Slutförd' : 'Pågående'}`, pageWidth - 60, 91);
-  
-  // Innehållsförteckning för sektioner
-  let yPosition = 100;
-  doc.setFont("helvetica", "bold");
-  doc.text("Innehåll:", 14, yPosition);
-  yPosition += 8;
-  
-  inspection.sections.forEach((section, index) => {
-    doc.setFont("helvetica", "normal");
-    doc.text(`${index + 1}. ${section.title}`, 20, yPosition);
-    yPosition += 7;
+// Funktion för att ladda bild som base64
+const loadImageAsBase64 = (url) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      ctx.drawImage(img, 0, 0);
+      
+      try {
+        const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+        resolve({
+          dataURL: dataURL,
+          width: img.width,
+          height: img.height
+        });
+      } catch (err) {
+        console.error('Error converting image to base64:', err);
+        resolve(null);
+      }
+    };
+    
+    img.onerror = () => {
+      console.error('Error loading image:', url);
+      resolve(null);
+    };
+    
+    // Lägg till cache-busting
+    const urlWithTimestamp = url.includes('?') 
+      ? `${url}&t=${Date.now()}` 
+      : `${url}?t=${Date.now()}`;
+    img.src = urlWithTimestamp;
   });
-  
-  // Generera varje sektion i besiktningen
-  yPosition += 10;
-  inspection.sections.forEach((section, sectionIndex) => {
-    // Kontrollera om vi behöver en ny sida
-    if (yPosition > 250) {
-      doc.addPage();
-      yPosition = 20;
-    }
+};
+
+export const generateInspectionPDF = async (inspection, installation, customer, address, userProfile = null) => {
+  try {
+    console.log('🎯 Generating simple PDF with data:', { inspection, installation, customer, address });
+    
+    // Skapa ny PDF med A4-format
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    let yPosition = 20;
+    
+    // ===== SIDHUVUD =====
+    // Enkel företagslogotyp i övre högra hörnet
+    const companyName = userProfile?.companyName || 'Stig Olofssons El AB';
+    doc.setFillColor(50, 50, 50);
+    doc.rect(pageWidth - 79, 10, 73, 10, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(companyName, pageWidth - 42.5, 16, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+    
+    // Huvudrubrik
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Kontrollrapport", 14, yPosition);
+    yPosition += 15;
+    
+    // ===== PROJEKTINFORMATION =====
+    // Enkel ruta
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.rect(14, yPosition, pageWidth - 28, 40);
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(`${sectionIndex + 1}. ${section.title}`, 14, yPosition);
-    yPosition += 10;
     doc.setFontSize(12);
+    doc.text("Projektinformation", 16, yPosition + 8);
+    
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
     
-    // Skapa tabell för sektionens kontrollpunkter
-    const tableData = [];
+    // Projektuppgifter
+    doc.text(`Kund: ${String(customer?.name || 'Uppgift saknas')}`, 16, yPosition + 16);
+    doc.text(`Adress: ${String(address?.street || 'Uppgift saknas')}`, 16, yPosition + 23);
+    doc.text(`${String(address?.postalCode || '')} ${String(address?.city || '')}`.trim() || 'Uppgift saknas', 16, yPosition + 30);
+    doc.text(`Anläggning: ${String(installation?.name || 'Uppgift saknas')}`, 16, yPosition + 37);
     
-    section.items.forEach(item => {
-      if (item.type === 'header') {
-        // Lägg till rubrik som en rad med bakgrundsfärg
-        tableData.push([{ content: item.label, colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
-      } else {
-        const value = item.type === 'checkbox' 
-          ? (item.value ? '✓' : '✗') 
-          : (item.value || '-');
-          
-        const notes = item.notes || '-';
+    // Datum
+    const inspectionDate = inspection.createdAt 
+      ? new Date(inspection.createdAt.seconds * 1000).toLocaleDateString('sv-SE')
+      : new Date().toLocaleDateString('sv-SE');
+    
+    doc.text(`Datum: ${inspectionDate}`, pageWidth - 70, yPosition + 16);
+    doc.text(`Kontroll: ${String(inspection.name || 'Standardkontroll')}`, pageWidth - 70, yPosition + 23);
+    
+    yPosition += 55;
+    
+    // ===== KONTROLLRESULTAT =====
+    if (inspection.sections && inspection.sections.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("Kontrollresultat", 14, yPosition);
+      yPosition += 15;
+      
+      // Iterera genom sektioner
+      for (const [sectionIndex, section] of inspection.sections.entries()) {
+        console.log(`📝 Processing section ${sectionIndex}:`, section.name);
         
-        tableData.push([
-          item.label, 
-          value,
-          notes
-        ]);
-      }
-    });
-    
-    // Generera tabellen
-    doc.autoTable({
-      startY: yPosition,
-      head: [['Kontrollpunkt', 'Värde', 'Anteckningar']],
-      body: tableData,
-      theme: 'grid',
-      styles: { overflow: 'linebreak', cellPadding: 3 },
-      headerStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-      didDrawPage: (data) => {
-        // Sidfot
-        doc.setFontSize(10);
-        doc.text(`Besiktningsprotokoll - Sida ${doc.internal.getNumberOfPages()}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
-      }
-    });
-    
-    // Uppdatera Y-position efter tabellen
-    yPosition = doc.lastAutoTable.finalY + 15;
-    
-    // Lägg till bilder om sådana finns 
-    for (const item of section.items) {
-      if (item.images && item.images.length > 0) {
-        // Lägg till en rubrik för bilderna
-        if (yPosition > 250) {
+        // Kontrollera om vi behöver ny sida
+        if (yPosition > pageHeight - 60) {
           doc.addPage();
           yPosition = 20;
         }
         
+        // Sektion rubrik
         doc.setFont("helvetica", "bold");
-        doc.text(`Bilder för: ${item.label}`, 14, yPosition);
-        yPosition += 8;
+        doc.setFontSize(12);
+        doc.text(`${sectionIndex + 1}. ${String(section.name || 'Namnlös sektion')}`, 14, yPosition);
+        yPosition += 10;
         
-        // Placera bilder i ett rutnät
-        let xPosition = 14;
-        const imageWidth = 80;
-        const imageHeight = 60;
-        
-        for (const image of item.images) {
-          // Kontrollera om vi behöver en ny rad eller ny sida
-          if (xPosition + imageWidth > pageWidth - 14) {
-            xPosition = 14;
-            yPosition += imageHeight + 10;
+        // Iterera genom items i sektionen
+        if (section.items && section.items.length > 0) {
+          for (const [itemIndex, item] of section.items.entries()) {
+            console.log(`  ❓ Processing item ${itemIndex}:`, item.label, 'Value:', item.value);
+            
+            // Kontrollera om vi behöver ny sida
+            if (yPosition > pageHeight - 40) {
+              doc.addPage();
+              yPosition = 20;
+            }
+            
+            // Fråga
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(10);
+            doc.text(`• ${String(item.label || 'Fråga utan text')}`, 20, yPosition);
+            yPosition += 6;
+            
+            // Svar med korrekt logik
+            let answerText = '';
+            let showAnswer = true; // Flag för om vi ska visa svar-raden
+            
+            if (item.type === 'yesno') {
+              if (item.value === true) {
+                answerText = 'Ja';
+              } else if (item.value === false) {
+                answerText = 'Nej';
+              } else {
+                answerText = 'Ej besvarad';
+              }
+            } else if (item.type === 'checkbox') {
+              answerText = item.value === true ? 'Markerad' : 'Ej markerad';
+            } else if (item.type === 'text') {
+              if (item.value && String(item.value).trim()) {
+                answerText = String(item.value);
+              } else {
+                showAnswer = false; // Visa inte svar-rad om det inte finns text
+              }
+            } else {
+              if (item.value && String(item.value).trim()) {
+                answerText = String(item.value);
+              } else {
+                showAnswer = false; // Visa inte svar-rad om det inte finns värde
+              }
+            }
+            
+            // Visa bara svar om det finns något att visa
+            if (showAnswer) {
+              doc.text(`  Svar: ${answerText}`, 25, yPosition);
+              yPosition += 6;
+            }
+            
+            // Anteckningar om de finns
+            if (item.notes && String(item.notes).trim()) {
+              doc.text(`  Anteckning: ${String(item.notes)}`, 25, yPosition);
+              yPosition += 6;
+            }
+            
+            // Bilder om de finns
+            if (item.images && item.images.length > 0) {
+              console.log(`  📸 Processing ${item.images.length} images for item ${itemIndex}`);
+              
+              doc.text(`  Bilder: ${item.images.length} st`, 25, yPosition);
+              yPosition += 8;
+              
+              // Visa bilder i rutnät - större bilder
+              const maxImageWidth = 70;  // Ökat från 40 till 70
+              const maxImageHeight = 50; // Ökat från 30 till 50
+              const imagesPerRow = 2;
+              let currentImageInRow = 0;
+              let rowStartY = yPosition;
+              
+              // Ladda och visa bilder (max 6 per fråga)
+              for (let i = 0; i < Math.min(item.images.length, 6); i++) {
+                try {
+                  console.log(`    🖼️ Loading image ${i + 1}:`, item.images[i].url);
+                  
+                  // Kontrollera om vi behöver ny sida för bilder
+                  if (yPosition > pageHeight - maxImageHeight - 20) {
+                    doc.addPage();
+                    yPosition = 20;
+                    currentImageInRow = 0;
+                    rowStartY = yPosition;
+                  }
+                  
+                  const imageData = await loadImageAsBase64(item.images[i].url);
+                  
+                  if (imageData) {
+                    console.log(`    ✅ Image ${i + 1} loaded successfully`);
+                    
+                    // Beräkna bildstorlek med bibehållna proportioner
+                    let imgWidth = maxImageWidth;
+                    let imgHeight = maxImageHeight;
+                    
+                    if (imageData.width && imageData.height) {
+                      const aspectRatio = imageData.width / imageData.height;
+                      
+                      if (aspectRatio > maxImageWidth / maxImageHeight) {
+                        imgHeight = imgWidth / aspectRatio;
+                      } else {
+                        imgWidth = imgHeight * aspectRatio;
+                      }
+                    }
+                    
+                    // Beräkna position - justerad för större bilder
+                    const xPos = 25 + (currentImageInRow * (maxImageWidth + 15)); // Mer spacing mellan bilder
+                    
+                    // Lägg till bilden
+                    doc.addImage(
+                      imageData.dataURL, 
+                      'JPEG', 
+                      xPos, 
+                      yPosition, 
+                      imgWidth, 
+                      imgHeight
+                    );
+                    
+                    // Bildnummer under bilden
+                    doc.setFontSize(8);
+                    doc.text(`Bild ${i + 1}`, xPos + imgWidth/2, yPosition + imgHeight + 4, { align: 'center' });
+                    doc.setFontSize(10);
+                    
+                    currentImageInRow++;
+                    
+                    // Ny rad efter 2 bilder
+                    if (currentImageInRow >= imagesPerRow) {
+                      yPosition += maxImageHeight + 8;
+                      currentImageInRow = 0;
+                      rowStartY = yPosition;
+                    }
+                    
+                  } else {
+                    console.log(`    ❌ Failed to load image ${i + 1}`);
+                    
+                    // Placeholder för misslyckad bildladdning - större
+                    const xPos = 25 + (currentImageInRow * (maxImageWidth + 15));
+                    
+                    doc.setFillColor(240, 240, 240);
+                    doc.rect(xPos, yPosition, maxImageWidth, maxImageHeight, 'F');
+                    
+                    doc.setFontSize(8);
+                    doc.text('Bild kunde inte laddas', xPos + maxImageWidth/2, yPosition + maxImageHeight/2, { align: 'center' });
+                    doc.setFontSize(10);
+                    
+                    currentImageInRow++;
+                    if (currentImageInRow >= imagesPerRow) {
+                      yPosition += maxImageHeight + 8;
+                      currentImageInRow = 0;
+                    }
+                  }
+                } catch (err) {
+                  console.error(`Error loading image ${i + 1} for PDF:`, err);
+                }
+              }
+              
+              // Justera Y-position om vi har ofullständig rad
+              if (currentImageInRow > 0) {
+                yPosition += maxImageHeight + 8;
+              }
+              
+              // Visa meddelande om fler bilder finns
+              if (item.images.length > 6) {
+                doc.setFontSize(8);
+                doc.text(`... och ${item.images.length - 6} bilder till`, 25, yPosition);
+                doc.setFontSize(10);
+                yPosition += 6;
+              }
+            }
+            
+            yPosition += 5; // Extra mellanrum mellan frågor
           }
-          
-          if (yPosition + imageHeight > 280) {
-            doc.addPage();
-            yPosition = 20;
-            xPosition = 14;
-          }
-          
-          // Här skulle du normalt lägga till bilden från URL
-          // Men detta kräver att bilderna är tillgängliga via cors-vänliga URL:er
-          // Vi lägger till en placeholder istället
-          doc.setFillColor(220, 220, 220);
-          doc.rect(xPosition, yPosition, imageWidth, imageHeight, 'F');
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.text('Bilden kunde inte laddas', xPosition + imageWidth/2, yPosition + imageHeight/2, { align: 'center' });
-          
-          xPosition += imageWidth + 10;
         }
         
-        // Uppdatera y-position efter bilderna
-        yPosition += imageHeight + 15;
+        yPosition += 8; // Extra mellanrum mellan sektioner
       }
     }
-  });
-  
-  // Underskrifter
-  if (yPosition > 220) {
-    doc.addPage();
-    yPosition = 40;
-  } else {
-    yPosition += 20;
+    
+    // ===== SIDNUMMER =====
+    const pageCount = doc.internal.getNumberOfPages();
+    const currentDate = new Date().toLocaleDateString('sv-SE');
+    
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.text(`Kontrollrapport - Sida ${i} av ${pageCount}`, 14, pageHeight - 10);
+      doc.text(currentDate, pageWidth - 14, pageHeight - 10, { align: 'right' });
+    }
+    
+    console.log('✅ Simple PDF generation completed successfully');
+    return doc;
+    
+  } catch (err) {
+    console.error('❌ Error generating PDF:', err);
+    throw new Error(`PDF-generering misslyckades: ${err.message}`);
   }
-  
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "bold");
-  doc.text("Underskrifter", 14, yPosition);
-  yPosition += 10;
-  
-  // Linjer för underskrifter
-  doc.setDrawColor(0);
-  doc.line(14, yPosition + 20, 100, yPosition + 20); // Besiktningsman
-  doc.line(pageWidth - 100, yPosition + 20, pageWidth - 14, yPosition + 20); // Kund
-  
-  doc.setFont("helvetica", "normal");
-  doc.text("Besiktningsman", 14, yPosition + 30);
-  doc.text("Kund", pageWidth - 100, yPosition + 30);
-  
-  // Spara dokumentet
-  return doc;
 };

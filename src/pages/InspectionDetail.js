@@ -1,676 +1,274 @@
 // src/pages/InspectionDetail.js
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import ImageUploader from '../components/ImageUploaderSupabase';
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
-import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '../contexts/AuthContext';
 import { useConfirmation } from '../components/ConfirmationProvider';
+import { generateInspectionPDF } from '../utils/pdfGenerator';
 import { supabase } from '../services/supabase';
-import SimpleImageUploader from '../components/SimpleImageUploader';
+import { v4 as uuidv4 } from 'uuid';
 
 const InspectionDetail = () => {
+  const { currentUser } = useAuth();
   const { customerId, addressId, installationId, inspectionId } = useParams();
   const navigate = useNavigate();
+  const confirmation = useConfirmation();
+  
+  // State variables
   const [inspection, setInspection] = useState(null);
   const [installation, setInstallation] = useState(null);
-  const [template, setTemplate] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [address, setAddress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
   const [editMode, setEditMode] = useState(false);
-  const [editingQuestions, setEditingQuestions] = useState(false);
-  const [activeImageModal, setActiveImageModal] = useState(null);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [savingAsNewTemplate, setSavingAsNewTemplate] = useState(false);
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [newItemLabel, setNewItemLabel] = useState('');
-  const [newItemType, setNewItemType] = useState('yesno');
-  const [activeSectionForNewItem, setActiveSectionForNewItem] = useState(null);
-  const confirmation = useConfirmation();
-  const [lastUploadSection, setLastUploadSection] = useState(null);
-  const [lastUploadItem, setLastUploadItem] = useState(null);
-  const sectionRefs = React.useRef({});
-  const [itemImages, setItemImages] = useState({});
-  const uploaderRefs = React.useRef({});
   const [editingName, setEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
+  const [activeImageModal, setActiveImageModal] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState({});
 
-useEffect(() => {
-  const fetchData = async () => {
-    try {
-      // Hämta besiktningsinformation
-      const inspectionDoc = await getDoc(doc(db, 'inspections', inspectionId));
-      
-      if (!inspectionDoc.exists()) {
-        setError('Besiktningen hittades inte');
+  // Sektionshantering
+  const [editingSection, setEditingSection] = useState(null);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [showAddSectionForm, setShowAddSectionForm] = useState(false);
+  const [activeSectionForNewItem, setActiveSectionForNewItem] = useState(null);
+  const [newItemLabel, setNewItemLabel] = useState('');
+  const [newItemType, setNewItemType] = useState('yesno');
+
+  // Mobile responsiveness helper
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Main data fetching useEffect
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!currentUser) {
+        setError('Du måste vara inloggad för att visa kontroller');
         setLoading(false);
         return;
       }
-      
-      // Säkerställ att varje item har en egen images-array
-      const inspectionData = {
-        id: inspectionDoc.id,
-        ...inspectionDoc.data()
-      };
-      
-      // Set up separate image tracking
-      const imagesByItem = {};
-      
-      // Gå igenom varje sektion och item för att skapa nya images-arrayer
-      if (inspectionData.sections) {
-        inspectionData.sections.forEach((section, sectionIndex) => {
-          if (section.items) {
-            section.items.forEach((item, itemIndex) => {
-              // Om images finns men är null, undefined eller inte en array, skapa en ny tom array
-              if (!Array.isArray(item.images)) {
-                item.images = [];
-              }
-              
-              // Track images by item
-              const itemKey = `${sectionIndex}_${itemIndex}`;
-              if (item.images && item.images.length > 0) {
-                imagesByItem[itemKey] = [...item.images];
-              }
-            });
-          }
-        });
-      }
-      
-      // Set up our direct image tracking
-      setItemImages(imagesByItem);
-      
-      console.log('Inspection data with initialized image arrays:', JSON.parse(JSON.stringify(inspectionData)));
-      
-      setInspection(inspectionData);
-      
-      // Hämta anläggningsinformation
-      const installationDoc = await getDoc(doc(db, 'installations', installationId));
-      
-      if (installationDoc.exists()) {
-        setInstallation({
-          id: installationDoc.id,
-          ...installationDoc.data()
-        });
-      }
 
-      // Hämta adressinformation
-      const addressDoc = await getDoc(doc(db, 'addresses', addressId));
-      
-      if (addressDoc.exists()) {
-        setAddress({
-          id: addressDoc.id,
-          ...addressDoc.data()
-        });
-      }
-
-      // Hämta kundinformation
-      const customerDoc = await getDoc(doc(db, 'customers', customerId));
-      
-      if (customerDoc.exists()) {
-        setCustomer({
-          id: customerDoc.id,
-          ...customerDoc.data()
-        });
-      }
-      
-      // Hämta mallinformation
-      if (inspectionData.templateId) {
-        const templateDoc = await getDoc(doc(db, 'checklistTemplates', inspectionData.templateId));
-        
-        if (templateDoc.exists()) {
-          setTemplate({
-            id: templateDoc.id,
-            ...templateDoc.data()
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setError('Kunde inte hämta besiktningsdata');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  fetchData();
-}, [inspectionId, installationId, addressId, customerId]);
-
-const handleSaveName = async () => {
-  const nameToSave = editedName.trim();
-  
-  if (!nameToSave) {
-    alert('Kontrollnamnet kan inte vara tomt');
-    return;
-  }
-  
-  setSaving(true);
-  
-  try {
-    // Update in Firestore
-    await updateDoc(doc(db, 'inspections', inspectionId), {
-      name: nameToSave,
-      updatedAt: serverTimestamp()
-    });
-    
-    // Update local state
-    setInspection(prev => ({
-      ...prev,
-      name: nameToSave
-    }));
-    
-    setEditingName(false);
-  } catch (err) {
-    console.error('Error updating inspection name:', err);
-    setError('Kunde inte uppdatera namnet');
-  } finally {
-    setSaving(false);
-  }
-};
-
-useEffect(() => {
-  if (inspection) {
-    // Initialize with current name or empty string, never undefined
-    setEditedName(inspection.name || '');
-  }
-}, [inspection]);
-
-  const handleItemChange = (sectionIndex, itemIndex, field, value) => {
-    const updatedInspection = { ...inspection };
-    updatedInspection.sections[sectionIndex].items[itemIndex][field] = value;
-    setInspection(updatedInspection);
-  };
-  
-  const handleFileButtonClick = (e, sectionIndex, itemIndex) => {
-    e.preventDefault(); // Förhindra standardbeteende
-    
-    // Förhindra att sidan scrollar
-    const currentScrollPosition = window.pageYOffset;
-    
-    // Hämta filuppladdaren via refs och klicka på den
-    setTimeout(() => {
-      if (uploaderRefs.current[`${sectionIndex}_${itemIndex}`]) {
-        uploaderRefs.current[`${sectionIndex}_${itemIndex}`].click();
-        
-        // Återställ scroll-positionen
-        window.scrollTo(0, currentScrollPosition);
-      }
-    }, 0);
-  };
-  
-  // Funktion för att hantera bilder uppladdade från SimpleImageUploader
-  const handleSimpleImageUpload = (imageData, sectionIndex, itemIndex) => {
-    console.log(`Received image for section ${sectionIndex}, item ${itemIndex}:`, imageData);
-    
-    // Make a deep copy of the state
-    const updatedInspection = JSON.parse(JSON.stringify(inspection));
-    
-    // Ensure the item has an images array
-    if (!Array.isArray(updatedInspection.sections[sectionIndex].items[itemIndex].images)) {
-      updatedInspection.sections[sectionIndex].items[itemIndex].images = [];
-    }
-    
-    // Add the image data to the specific item
-    updatedInspection.sections[sectionIndex].items[itemIndex].images.push(imageData);
-    
-    // Update state
-    setInspection(updatedInspection);
-    
-    // Save to Firestore
-    updateDoc(doc(db, 'inspections', inspectionId), {
-      sections: updatedInspection.sections,
-      updatedAt: serverTimestamp()
-    }).catch(err => {
-      console.error('Error saving image to Firestore:', err);
-    });
-  };
-  const handleImageUpload = (sectionIndex, itemIndex, imageData) => {
-    console.log(`BEFORE UPLOAD - Current inspection:`, JSON.parse(JSON.stringify(inspection)));
-    console.log(`Uploading to section ${sectionIndex}, item ${itemIndex}`);
-    console.log('Image data:', imageData);
-    
-    const updatedInspection = { ...inspection };
-    const item = updatedInspection.sections[sectionIndex].items[itemIndex];
-    
-    // Initialisera images-array om den inte finns
-    if (!Array.isArray(item.images)) {
-      item.images = [];
-      console.log(`Created new images array for section ${sectionIndex}, item ${itemIndex}`);
-    }
-    
-    // Lägg till den nya bilden
-    const newImage = {
-      ...imageData,
-      sectionIndex: sectionIndex,
-      itemIndex: itemIndex
-    };
-    
-    console.log(`Adding image to section ${sectionIndex}, item ${itemIndex}:`, newImage);
-    item.images.push(newImage);
-    
-    console.log('AFTER UPLOAD - Images in this item:', JSON.parse(JSON.stringify(item.images)));
-    console.log('AFTER UPLOAD - All items with images:');
-    updatedInspection.sections.forEach((section, secIdx) => {
-      section.items.forEach((itm, itmIdx) => {
-        if (itm.images && itm.images.length > 0) {
-          console.log(`Section ${secIdx}, Item ${itmIdx} has ${itm.images.length} images`);
-        }
-      });
-    });
-    
-    // Spara direkt till state och Firestore
-    setInspection(updatedInspection);
-    handleSave(false);
-  };
-
-// Funktion för att hantera bilduppladdning från specifik fråga
-const uploadImageForItem = async (sectionIndex, itemIndex, fileInputElement) => {
-  if (!fileInputElement.files || !fileInputElement.files[0]) {
-    console.log('No file selected');
-    return;
-  }
-  
-  const file = fileInputElement.files[0];
-  console.log(`Uploading file for section ${sectionIndex}, item ${itemIndex}:`, file.name);
-  
-  try {
-    // Unique path based on section and item
-    const timestamp = Date.now();
-    const fileExt = file.name.split('.').pop();
-    const fileName = `direct_${timestamp}_${sectionIndex}_${itemIndex}.${fileExt}`;
-    const filePath = `inspections/direct/${inspectionId}/${sectionIndex}/${itemIndex}/${fileName}`;
-    
-    // Upload to Supabase
-    const { data, error: uploadError } = await supabase.storage
-      .from('inspections')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-      
-    if (uploadError) {
-      throw uploadError;
-    }
-    
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('inspections')
-      .getPublicUrl(filePath);
-    
-    const imageData = {
-      url: urlData.publicUrl,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      path: filePath,
-      timestamp: timestamp,
-      uniqueId: `${sectionIndex}_${itemIndex}_${timestamp}`
-    };
-    
-    // Update our direct image tracking state
-    const itemKey = `${sectionIndex}_${itemIndex}`;
-    const updatedImages = { ...itemImages };
-    
-    if (!updatedImages[itemKey]) {
-      updatedImages[itemKey] = [];
-    }
-    
-    updatedImages[itemKey].push(imageData);
-    setItemImages(updatedImages);
-    
-    // Save in the inspection object as well
-    const updatedInspection = { ...inspection };
-    if (!Array.isArray(updatedInspection.sections[sectionIndex].items[itemIndex].images)) {
-      updatedInspection.sections[sectionIndex].items[itemIndex].images = [];
-    }
-    
-    updatedInspection.sections[sectionIndex].items[itemIndex].images.push(imageData);
-    setInspection(updatedInspection);
-    
-    // Save to Firestore
-    await updateDoc(doc(db, 'inspections', inspectionId), {
-      sections: updatedInspection.sections,
-      updatedAt: serverTimestamp()
-    });
-    
-    // Reset the file input
-    fileInputElement.value = '';
-    
-  } catch (err) {
-    console.error('Error uploading image:', err);
-    alert(`Upload error: ${err.message}`);
-  }
-};
-
-const handleDeleteImage = async (sectionIndex, itemIndex, imageIndex) => {
-  confirmation.confirm({
-    title: 'Ta bort bild',
-    message: 'Är du säker på att du vill ta bort denna bild?',
-    onConfirm: async () => {
       try {
-        const updatedInspection = { ...inspection };
-        const itemImages = updatedInspection.sections[sectionIndex].items[itemIndex].images;
+        console.log('🔍 Fetching inspection with ID:', inspectionId);
+
+        // Hämta kontroll först
+        const inspectionDoc = await getDoc(doc(db, 'inspections', inspectionId));
         
-        if (!itemImages || itemImages.length <= imageIndex) {
-          console.error('Image not found at index:', imageIndex);
+        if (!inspectionDoc.exists()) {
+          console.error('❌ Inspection document does not exist:', inspectionId);
+          setError('Kontrollen hittades inte');
+          setLoading(false);
           return;
         }
         
-        const imageToDelete = itemImages[imageIndex];
-        console.log(`Deleting image from section ${sectionIndex}, item ${itemIndex}:`, imageToDelete);
+        console.log('✅ Inspection found');
+        const inspectionData = { id: inspectionDoc.id, ...inspectionDoc.data() };
         
-        // Delete from storage
-        if (imageToDelete.path) {
-          const { error } = await supabase.storage
-            .from('inspections')
-            .remove([imageToDelete.path]);
-            
-          if (error) {
-            console.error('Error deleting from storage:', error);
-          }
+        // Säkerställ att varje item har en egen images-array
+        if (inspectionData.sections) {
+          inspectionData.sections.forEach((section, sectionIndex) => {
+            if (section.items) {
+              section.items.forEach((item, itemIndex) => {
+                if (!Array.isArray(item.images)) {
+                  item.images = [];
+                }
+              });
+            }
+          });
         }
         
-        // Remove from both main state and our tracking object
-        itemImages.splice(imageIndex, 1);
-        setInspection(updatedInspection);
-        
-        // Remove from our direct tracking
-        const itemKey = `${sectionIndex}_${itemIndex}`;
-        if (itemImages[itemKey]) {
-          const updatedDirectImages = { ...itemImages };
-          updatedDirectImages[itemKey].splice(imageIndex, 1);
-          if (updatedDirectImages[itemKey].length === 0) {
-            delete updatedDirectImages[itemKey];
-          }
-          setItemImages(updatedDirectImages);
+        setInspection(inspectionData);
+        setEditedName(inspectionData.name || inspectionData.templateName || '');
+
+        // Hämta relaterad information parallellt
+        const fetchPromises = [
+          getDoc(doc(db, 'customers', customerId)).catch(err => {
+            console.error('❌ Error fetching customer:', err);
+            return null;
+          }),
+          getDoc(doc(db, 'addresses', addressId)).catch(err => {
+            console.error('❌ Error fetching address:', err);
+            return null;
+          }),
+          getDoc(doc(db, 'installations', installationId)).catch(err => {
+            console.error('❌ Error fetching installation:', err);
+            return null;
+          })
+        ];
+
+        const [customerDoc, addressDoc, installationDoc] = await Promise.all(fetchPromises);
+
+        if (customerDoc && customerDoc.exists()) {
+          setCustomer({ id: customerDoc.id, ...customerDoc.data() });
         }
         
-        // Save to Firestore
-        await updateDoc(doc(db, 'inspections', inspectionId), {
-          sections: updatedInspection.sections,
-          updatedAt: serverTimestamp()
-        });
+        if (addressDoc && addressDoc.exists()) {
+          setAddress({ id: addressDoc.id, ...addressDoc.data() });
+        }
         
-        // Close image modal if open
-        setActiveImageModal(null);
-        
+        if (installationDoc && installationDoc.exists()) {
+          setInstallation({ id: installationDoc.id, ...installationDoc.data() });
+        }
+
+        console.log('✅ All data fetched successfully');
+
       } catch (err) {
-        console.error('Error deleting image:', err);
-        setError('Kunde inte ta bort bilden');
+        console.error('❌ Critical error fetching inspection data:', err);
+        if (err.code === 'permission-denied') {
+          setError('Du har inte behörighet att visa denna kontroll');
+        } else if (err.code === 'unavailable') {
+          setError('Tjänsten är för tillfället otillgänglig. Försök igen senare.');
+        } else {
+          setError(`Kunde inte ladda kontrollinformation: ${err.message || 'Okänt fel'}`);
+        }
+      } finally {
+        setLoading(false);
       }
-    }
-  });
-};
-
-const ItemImageUploader = ({ sectionIndex, itemIndex }) => {
-  const [uploadStatus, setUploadStatus] = useState('');
-  
-  const handleTestUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    setUploadStatus('Uploading...');
-    
-    try {
-      // Prepare image data
-      const timestamp = Date.now();
-      const fileExt = file.name.split('.').pop();
-      const fileName = `test_${timestamp}_sec${sectionIndex}_item${itemIndex}.${fileExt}`;
-      const filePath = `inspections/test/${sectionIndex}/${itemIndex}/${fileName}`;
-      
-      // Upload to Supabase
-      const { data, error: uploadError } = await supabase.storage
-        .from('inspections')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-        
-      if (uploadError) {
-        throw uploadError;
-      }
-      
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('inspections')
-        .getPublicUrl(filePath);
-      
-      const publicUrl = urlData.publicUrl;
-      
-      // Manually update inspection state directly
-      const updatedInspection = JSON.parse(JSON.stringify(inspection));
-      if (!Array.isArray(updatedInspection.sections[sectionIndex].items[itemIndex].images)) {
-        updatedInspection.sections[sectionIndex].items[itemIndex].images = [];
-      }
-      
-      // Add image to the specific item
-      const imageData = {
-        url: publicUrl,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        timestamp: timestamp,
-        path: filePath,
-        uniqueKey: `sec${sectionIndex}_item${itemIndex}_${timestamp}`
-      };
-      
-      updatedInspection.sections[sectionIndex].items[itemIndex].images.push(imageData);
-      
-      console.log(`Added image to section ${sectionIndex}, item ${itemIndex}:`, imageData);
-      console.log('Updated inspection state:', updatedInspection.sections[sectionIndex].items[itemIndex].images);
-      
-      setInspection(updatedInspection);
-      
-      // Save to Firestore
-      await updateDoc(doc(db, 'inspections', inspectionId), {
-        sections: updatedInspection.sections,
-        updatedAt: serverTimestamp()
-      });
-      
-      setUploadStatus('Upload successful!');
-      setTimeout(() => setUploadStatus(''), 3000);
-      
-    } catch (err) {
-      console.error('Test upload error:', err);
-      setUploadStatus(`Error: ${err.message}`);
-    }
-  };
-  
-  return (
-    <div className="test-uploader" style={{ marginTop: '10px', padding: '5px', border: '1px dashed #ccc', borderRadius: '8px' }}>
-      <p style={{ margin: '0 0 5px 0', fontSize: '14px', fontWeight: 'bold' }}>
-        Test uploader (Section {sectionIndex}, Item {itemIndex})
-      </p>
-      
-      <input 
-        type="file" 
-        accept="image/*" 
-        onChange={handleTestUpload} 
-        style={{ fontSize: '14px' }}
-      />
-      
-      {uploadStatus && (
-        <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: uploadStatus.includes('Error') ? 'red' : 'green' }}>
-          {uploadStatus}
-        </p>
-      )}
-    </div>
-  );
-};
-
-const createItemSpecificUploader = (sectionIndex, itemIndex) => {
-  return (imageData) => {
-    console.log(`SPECIFIC UPLOADER: Uploading to section ${sectionIndex}, item ${itemIndex}`);
-    
-    // Skapa en djup kopia av hela inspection-objektet för att undvika referensproblem
-    const updatedInspection = JSON.parse(JSON.stringify(inspection));
-    
-    // Hämta specifikt item
-    const item = updatedInspection.sections[sectionIndex].items[itemIndex];
-    
-    // Se till att images-array finns
-    if (!Array.isArray(item.images)) {
-      item.images = [];
-    }
-    
-    // Skapa bilddata med metadata för sektion och item
-    const imageWithMetadata = {
-      ...imageData,
-      uploadedToSection: sectionIndex,
-      uploadedToItem: itemIndex,
-      uploadTimestamp: Date.now()
     };
-    
-    // Lägg till bilden till just detta item
-    item.images.push(imageWithMetadata);
-    
-    // Logga alla bilder efter uppdatering
-    console.log(`AFTER SPECIFIC UPLOAD - Images for section ${sectionIndex}, item ${itemIndex}:`, 
-      JSON.parse(JSON.stringify(item.images)));
-    
-    // Uppdatera state och spara
+
+    fetchData();
+  }, [customerId, addressId, installationId, inspectionId, currentUser]);
+
+  // Handler functions
+  const handleItemChange = async (sectionIndex, itemIndex, field, value) => {
+    const updatedInspection = { ...inspection };
+    updatedInspection.sections[sectionIndex].items[itemIndex][field] = value;
     setInspection(updatedInspection);
     
-    // Asynkront spara till Firestore
-    setTimeout(() => {
-      handleSave(false);
-    }, 0);
+    // Autosave after a short delay
+    await saveInspection(updatedInspection);
   };
-};
 
-  const handleSave = async (resetEditMode = true) => {
-    setSaving(true);
-    
+  const saveInspection = async (inspectionData = inspection) => {
     try {
       await updateDoc(doc(db, 'inspections', inspectionId), {
-        sections: inspection.sections,
+        sections: inspectionData.sections,
+        name: inspectionData.name,
         updatedAt: serverTimestamp()
       });
-      
-      // Endast återställ editMode om det explicit begärts
-      if (resetEditMode) {
-        setEditMode(false);
-        setEditingQuestions(false);
-      }
     } catch (err) {
-      console.error('Error updating inspection:', err);
+      console.error('Error saving inspection:', err);
       setError('Kunde inte spara ändringar');
-    } finally {
-      setSaving(false);
     }
   };
 
-  const completeInspection = async () => {
-    // Kontrollera om alla obligatoriska fält är ifyllda
-    let allRequiredFilled = true;
-    
-    for (const section of inspection.sections) {
-      for (const item of section.items) {
-        if (item.required && item.type !== 'header') {
-          if (
-            (item.type === 'yesno' && item.value === null) ||
-            (item.type === 'checkbox' && !item.value) || 
-            (item.type === 'text' && !item.value?.trim())
-          ) {
-            allRequiredFilled = false;
-            break;
-          }
-        }
-      }
-      if (!allRequiredFilled) break;
-    }
-    
-    if (!allRequiredFilled) {
-      alert('Alla obligatoriska fält måste fyllas i innan besiktningen kan slutföras.');
-      return;
-    }
-    
-    setSaving(true);
-    
-    try {
-      await updateDoc(doc(db, 'inspections', inspectionId), {
-        status: 'completed',
-        completedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      
-      setInspection(prev => ({
-        ...prev,
-        status: 'completed',
-        completedAt: new Date() // Placeholder tills serverTimestamp uppdateras
-      }));
-    } catch (err) {
-      console.error('Error completing inspection:', err);
-      setError('Kunde inte slutföra besiktningen');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    confirmation.confirm({
-      title: 'Ta bort kontroll',
-      message: 'Är du säker på att du vill ta bort denna kontroll?',
-      onConfirm: async () => {
-        setSaving(true);
-        
-        try {
-          await deleteDoc(doc(db, 'inspections', inspectionId));
-          navigate(`/customers/${customerId}/addresses/${addressId}/installations/${installationId}`);
-        } catch (err) {
-          console.error('Error deleting inspection:', err);
-          setError('Kunde inte ta bort kontrollen');
-          setSaving(false);
-        }
-      }
-    });
-  };
-  const toggleNameEdit = () => {
-    if (inspection.status === 'completed') {
-      return;
-    }
-    // Initialize name if it was null/undefined
-    if (!editedName && (!inspection.name || inspection.name === '')) {
-      setEditedName('');
-    }
-    setEditingName(!editingName);
-  };
-
-  const toggleEditingQuestions = () => {
-    if (inspection.status === 'completed') {
-      alert('Du kan inte redigera frågor i en slutförd besiktning.');
-      return;
-    }
-    setEditingQuestions(!editingQuestions);
-    // Om vi stänger frågeredigeringen, spara ändringarna
-    if (editingQuestions) {
-      handleSave();
-    }
-  };
-
-  const addNewItem = (sectionIndex) => {
-    if (!newItemLabel.trim()) {
-      alert('Ange en etikett för den nya frågan');
+  // Sektionshantering funktioner
+  const handleEditSectionName = async (sectionIndex, newName) => {
+    if (!newName.trim()) {
+      alert('Sektionsnamnet kan inte vara tomt');
       return;
     }
 
     const updatedInspection = { ...inspection };
+    updatedInspection.sections[sectionIndex].name = newName.trim();
+    setInspection(updatedInspection);
+    setEditingSection(null);
+    
+    await saveInspection(updatedInspection);
+  };
+
+  const addNewSection = async () => {
+    if (!newSectionName.trim()) {
+      alert('Ange ett namn för sektionen');
+      return;
+    }
+    
+    const updatedInspection = { ...inspection };
+    
+    // Säkerställ att sections array finns
+    if (!updatedInspection.sections) {
+      updatedInspection.sections = [];
+    }
+    
+    const newSection = {
+      name: newSectionName.trim(),
+      items: []
+    };
+    
+    updatedInspection.sections.push(newSection);
+    setInspection(updatedInspection);
+    
+    // Återställ formuläret
+    setNewSectionName('');
+    setShowAddSectionForm(false);
+    
+    // Spara direkt
+    await saveInspection(updatedInspection);
+  };
+
+  const removeSection = async (sectionIndex) => {
+    confirmation.confirm({
+      title: 'Ta bort sektion',
+      message: 'Är du säker på att du vill ta bort denna sektion och alla dess frågor?',
+      onConfirm: async () => {
+        const updatedInspection = { ...inspection };
+        
+        // Ta bort bilder från storage för alla items i sektionen
+        const section = updatedInspection.sections[sectionIndex];
+        if (section.items) {
+          for (const item of section.items) {
+            if (item.images && Array.isArray(item.images)) {
+              for (const image of item.images) {
+                if (image.path) {
+                  try {
+                    await supabase.storage.from('inspections').remove([image.path]);
+                  } catch (err) {
+                    console.error('Error deleting image from storage:', err);
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        updatedInspection.sections.splice(sectionIndex, 1);
+        setInspection(updatedInspection);
+        await saveInspection(updatedInspection);
+      }
+    });
+  };
+
+  const addNewItem = async (targetSectionIndex = null) => {
+    if (!newItemLabel.trim()) {
+      alert('Ange en frågetext');
+      return;
+    }
+    
+    // Använd målsektionen eller den aktiva sektionen
+    const sectionIndex = targetSectionIndex !== null ? targetSectionIndex : activeSectionForNewItem;
+    
+    if (sectionIndex === null || sectionIndex === undefined) {
+      alert('Välj en sektion att lägga till frågan i');
+      return;
+    }
+    
+    const updatedInspection = { ...inspection };
+    
     const newItem = {
       id: uuidv4(),
       type: newItemType,
-      label: newItemLabel,
+      label: newItemLabel.trim(),
       required: false,
       allowImages: true,
-      allowMultiple: newItemType === 'checkbox',
       value: newItemType === 'yesno' ? null : 
-            newItemType === 'checkbox' ? false : '',
+             newItemType === 'checkbox' ? false : '',
       notes: '',
       images: []
     };
+    
+    // Säkerställ att sektionen har en items array
+    if (!Array.isArray(updatedInspection.sections[sectionIndex].items)) {
+      updatedInspection.sections[sectionIndex].items = [];
+    }
     
     updatedInspection.sections[sectionIndex].items.push(newItem);
     setInspection(updatedInspection);
@@ -679,508 +277,370 @@ const createItemSpecificUploader = (sectionIndex, itemIndex) => {
     setNewItemLabel('');
     setNewItemType('yesno');
     setActiveSectionForNewItem(null);
+    
+    // Spara direkt
+    await saveInspection(updatedInspection);
   };
 
-  const removeItem = (sectionIndex, itemIndex) => {
+  const removeItem = async (sectionIndex, itemIndex) => {
     confirmation.confirm({
       title: 'Ta bort fråga',
       message: 'Är du säker på att du vill ta bort denna fråga?',
-      onConfirm: () => {
+      onConfirm: async () => {
         const updatedInspection = { ...inspection };
+        
+        // Ta bort bilder från storage först
+        const item = updatedInspection.sections[sectionIndex].items[itemIndex];
+        if (item.images && Array.isArray(item.images)) {
+          for (const image of item.images) {
+            if (image.path) {
+              try {
+                await supabase.storage.from('inspections').remove([image.path]);
+              } catch (err) {
+                console.error('Error deleting image from storage:', err);
+              }
+            }
+          }
+        }
+        
+        // Ta bort frågan från arrayen
         updatedInspection.sections[sectionIndex].items.splice(itemIndex, 1);
         setInspection(updatedInspection);
+        await saveInspection(updatedInspection);
       }
     });
   };
 
-  const handleEditItem = (sectionIndex, itemIndex, newLabel) => {
-    const updatedInspection = { ...inspection };
-    updatedInspection.sections[sectionIndex].items[itemIndex].label = newLabel;
-    setInspection(updatedInspection);
+  const handleMarkComplete = async () => {
+    if (!inspection || inspection.status === 'completed') return;
+    
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, 'inspections', inspectionId), {
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      setInspection(prev => ({ ...prev, status: 'completed' }));
+      setEditMode(false);
+    } catch (err) {
+      console.error('Error completing inspection:', err);
+      setError('Kunde inte slutföra kontrollen');
+    } finally {
+      setUpdating(false);
+    }
   };
 
-  const saveAsNewTemplate = async () => {
-    if (!newTemplateName.trim()) {
-      alert('Ange ett namn för den nya mallen');
+  const handleReopen = async () => {
+    if (!inspection || inspection.status !== 'completed') return;
+    
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, 'inspections', inspectionId), {
+        status: 'in-progress',
+        completedAt: null,
+        updatedAt: serverTimestamp()
+      });
+      
+      setInspection(prev => ({ ...prev, status: 'in-progress', completedAt: null }));
+    } catch (err) {
+      console.error('Error reopening inspection:', err);
+      setError('Kunde inte återöppna kontrollen');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDelete = () => {
+    confirmation.confirm({
+      title: 'Ta bort kontroll',
+      message: 'Är du säker på att du vill ta bort denna kontroll? Detta kan inte ångras.',
+      onConfirm: async () => {
+        setUpdating(true);
+        try {
+          await deleteDoc(doc(db, 'inspections', inspectionId));
+          navigate(`/customers/${customerId}/addresses/${addressId}/installations/${installationId}`);
+        } catch (err) {
+          console.error('Error deleting inspection:', err);
+          setError('Kunde inte ta bort kontrollen');
+          setUpdating(false);
+        }
+      }
+    });
+  };
+
+  const handleSaveName = async () => {
+    const nameToSave = editedName.trim();
+    if (!nameToSave) {
+      alert('Kontrollnamnet kan inte vara tomt');
       return;
     }
     
     setSaving(true);
-    
     try {
-      // Skapa en ny mall baserad på nuvarande besiktning
-      const templateData = {
-        name: newTemplateName,
-        description: `Skapad från besiktning för ${installation?.name || 'anläggning'}`,
-        sections: inspection.sections.map(section => ({
-          title: section.title,
-          items: section.items.map(item => ({
-            id: uuidv4(),
-            type: item.type,
-            label: item.label,
-            required: item.required,
-            allowImages: item.allowImages,
-            allowMultiple: item.allowMultiple
-          }))
-        })),
-        createdAt: serverTimestamp(),
+      await updateDoc(doc(db, 'inspections', inspectionId), {
+        name: nameToSave,
         updatedAt: serverTimestamp()
-      };
+      });
       
-      await addDoc(collection(db, 'checklistTemplates'), templateData);
-      
-      setSavingAsNewTemplate(false);
-      setNewTemplateName('');
-      alert('Mallen har sparats!');
+      setInspection(prev => ({ ...prev, name: nameToSave }));
+      setEditingName(false);
     } catch (err) {
-      console.error('Error saving template:', err);
-      alert('Kunde inte spara mallen. Försök igen senare.');
+      console.error('Error updating inspection name:', err);
+      setError('Kunde inte uppdatera namnet');
     } finally {
       setSaving(false);
     }
   };
 
-
-  
-const generateInspectionPDF = async () => {
-  if (!inspection || !installation || !customer || !address) {
-    alert('Kunde inte generera PDF: Data saknas');
-    return null;
-  }
-  
-  setGeneratingPdf(true);
-  
-  try {
-    // Skapa ny PDF med A4-format
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const pageHeight = doc.internal.pageSize.height;
+  const handleImageUpload = async (sectionIndex, itemIndex, file) => {
+    const uploadKey = `${sectionIndex}-${itemIndex}`;
+    setUploadingImages(prev => ({ ...prev, [uploadKey]: true }));
     
-// ===== SNYGGARE LOGOTYP =====
-// Position och storlek
-const logoX = pageWidth - 79;
-const logoY = 10;
-const logoWidth = 73;
-const logoHeight = 10;
-
-// Rita en enkel rektangel med mörkgrå bakgrund
-doc.setFillColor(50, 50, 50);
-doc.rect(logoX, logoY, logoWidth, logoHeight, 'F');
-
-// Lägg till texten
-doc.setTextColor(255, 255, 255); // Vit text
-doc.setFont("helvetica", "bold");
-doc.setFontSize(20);
-doc.text("Stig Olofssons El AB", logoX + logoWidth/2, logoY + logoHeight/2 + 1, { 
-  align: "center", 
-  baseline: "middle" 
-});
-
-// Återställ textfärg till svart
-doc.setTextColor(0, 0, 0);
-
-
-    // ===== SIDHUVUD =====
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("Kontroll", 14, 20);
-    
-    // ===== KUNDUPPGIFTER =====
-    doc.setDrawColor(0);
-    doc.setLineWidth(0.5);
-    doc.rect(14, 30, pageWidth - 28, 45);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Kunduppgifter", 16, 38);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    
-    // Kunduppgifter
-    doc.text(`Kund: ${customer?.name || 'Uppgift saknas'}`, 16, 46);
-    doc.text(`Adress: ${address?.street || ''}`, 16, 54);
-    doc.text(`${address?.postalCode || ''} ${address?.city || ''}`, 16, 62);
-    doc.text(`Anläggning: ${installation?.name || 'Uppgift saknas'} / ${inspection?.name || 'Namnlös kontroll'}`, 16, 70);
-    
-    // Datum och status
-    const inspectionDate = inspection.createdAt 
-      ? new Date(inspection.createdAt.seconds * 1000).toLocaleDateString() 
-      : 'Okänt datum';
-    
-    doc.text(`Datum: ${inspectionDate}`, pageWidth - 90, 54);
-    doc.text(`Status: ${inspection.status === 'completed' ? 'Slutförd' : 'Pågående'}`, pageWidth - 90, 62);
-    
-    // ===== INNEHÅLL =====
-    
-    // Preload images - Ladda bilder och deras dimensioner i förväg
-    const imageCache = {};
-    
-    // Funktion för att ladda en bild från URL
-    const loadImage = (url) => {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";  // Viktigt för CORS
-        img.onload = () => {
-          // Skapa en canvas för att konvertera bilden
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          // Sätt canvas-dimensioner
-          canvas.width = img.width;
-          canvas.height = img.height;
-          
-          // Rita bilden på canvas
-          ctx.drawImage(img, 0, 0);
-          
-          // Konvertera till dataURL
-          try {
-            const dataUrl = canvas.toDataURL('image/jpeg');
-            resolve({
-              dataUrl,
-              width: img.width,
-              height: img.height
-            });
-          } catch (err) {
-            // Om det inte går att få dataURL (oftast pga CORS)
-            console.error('Kunde inte konvertera bild:', err);
-            resolve(null); // Returnera null istället för att avvisa löftet
-          }
-        };
-        
-        img.onerror = () => {
-          console.error('Kunde inte ladda bild:', url);
-          resolve(null); // Returnera null istället för att avvisa löftet
-        };
-        
-        img.src = url;
-      });
-    };
-    
-    // Ladda alla bilder i förväg
     try {
-      const allImages = [];
-      for (const section of inspection.sections) {
-        for (const item of section.items) {
-          if (item.images && item.images.length > 0) {
-            for (const image of item.images) {
-              if (image.url) {
-                allImages.push({ 
-                  url: image.url, 
-                  key: image.url  // Använd URL som nyckel
-                });
-              }
-            }
-          }
-        }
+      const timestamp = Date.now();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `img_${timestamp}.${fileExt}`;
+      const filePath = `inspections/${inspectionId}/${sectionIndex}/${itemIndex}/${fileName}`;
+      
+      // Upload to Supabase
+      const { data, error: uploadError } = await supabase.storage
+        .from('inspections')
+        .upload(filePath, file, { cacheControl: '3600', upsert: false });
+        
+      if (uploadError) throw uploadError;
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('inspections')
+        .getPublicUrl(filePath);
+      
+      const imageData = {
+        url: urlData.publicUrl,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        path: filePath,
+        timestamp: timestamp,
+        uniqueId: `${sectionIndex}_${itemIndex}_${timestamp}`
+      };
+      
+      // Update inspection state
+      const updatedInspection = { ...inspection };
+      if (!Array.isArray(updatedInspection.sections[sectionIndex].items[itemIndex].images)) {
+        updatedInspection.sections[sectionIndex].items[itemIndex].images = [];
       }
       
-      // Ladda alla unika bilder parallellt
-      const uniqueImages = allImages.filter((img, index, self) => 
-        self.findIndex(t => t.key === img.key) === index
-      );
+      updatedInspection.sections[sectionIndex].items[itemIndex].images.push(imageData);
+      setInspection(updatedInspection);
       
-      console.log(`Laddar ${uniqueImages.length} bilder...`);
+      // Save to Firestore
+      await saveInspection(updatedInspection);
       
-      const loadPromises = uniqueImages.map(async img => {
-        try {
-          const imageData = await loadImage(img.url);
-          if (imageData) {
-            imageCache[img.key] = imageData;
-          }
-        } catch (err) {
-          console.error(`Kunde inte ladda bild: ${img.url}`, err);
-        }
-      });
-      
-      await Promise.all(loadPromises);
-      console.log(`Laddade ${Object.keys(imageCache).length} av ${uniqueImages.length} bilder`);
     } catch (err) {
-      console.error('Fel vid bildladdning:', err);
-    }
-    
-    // Starta innehåll efter kunduppgifter
-    let yPosition = 90;
-    
-    // Maximal bredd och höjd för bilder
-    const maxImageWidth = 120;
-    const maxImageHeight = 90;
-    
-    // Generera sektioner med bilder
-    for (let sectionIndex = 0; sectionIndex < inspection.sections.length; sectionIndex++) {
-      const section = inspection.sections[sectionIndex];
-      
-      // Kontrollera om vi behöver en ny sida
-      if (yPosition > pageHeight - 30) {
-        doc.addPage();
-        yPosition = 20;
-      }
-      
-      // Skapa sektionsrubrik
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text(`${sectionIndex + 1}. ${section.title}`, 14, yPosition);
-      yPosition += 10;
-      doc.setFontSize(11);
-      
-      // Process each item in the section
-      for (let itemIndex = 0; itemIndex < section.items.length; itemIndex++) {
-        const item = section.items[itemIndex];
-        
-        // Kontrollera om vi behöver en ny sida för detta objekt och dess bilder
-        const hasImages = Array.isArray(item.images) && item.images.length > 0;
-        const estimatedHeight = item.type === 'header' ? 8 : 10;
-        const imageHeight = hasImages ? 
-          Math.min(maxImageHeight, 40 * item.images.length) : 0;
-          
-        if (yPosition + estimatedHeight + imageHeight > pageHeight - 20) {
-          doc.addPage();
-          yPosition = 20;
-        }
-        
-        // Hantera olika frågetyper
-        if (item.type === 'header') {
-          // Skriv rubriken
-          doc.setFont("helvetica", "bold");
-          doc.text(item.label, 20, yPosition);
-          yPosition += 8;
-          doc.setFont("helvetica", "normal");
-        } else if (item.type === 'yesno') {
-          // Ja/nej-fråga med kryssrutor
-          doc.setFont("helvetica", "normal");
-          doc.text(item.label, 20, yPosition);
-          
-          // Rita "Ja" kryssruta
-          doc.rect(pageWidth - 45, yPosition - 4, 5, 5);
-          
-          // Fyll i "Ja" kryssruta om värdet är "yes"
-          if (item.value === 'yes') {
-            doc.line(pageWidth - 45, yPosition - 4, pageWidth - 40, yPosition + 1);
-            doc.line(pageWidth - 45, yPosition + 1, pageWidth - 40, yPosition - 4);
-          }
-          
-          doc.text("Ja", pageWidth - 38, yPosition);
-          
-          // Rita "Nej" kryssruta
-          doc.rect(pageWidth - 28, yPosition - 4, 5, 5);
-          
-          // Fyll i "Nej" kryssruta om värdet är "no"
-          if (item.value === 'no') {
-            doc.line(pageWidth - 28, yPosition - 4, pageWidth - 23, yPosition + 1);
-            doc.line(pageWidth - 28, yPosition + 1, pageWidth - 23, yPosition - 4);
-          }
-          
-          doc.text("Nej", pageWidth - 22, yPosition);
-          
-          yPosition += 8;
-        } else if (item.type === 'checkbox') {
-          // Kryssruta
-          doc.setFont("helvetica", "normal");
-          doc.rect(20, yPosition - 4, 5, 5);
-          
-          if (item.value) {
-            doc.line(20, yPosition - 4, 25, yPosition + 1);
-            doc.line(20, yPosition + 1, 25, yPosition - 4);
-          }
-          
-          doc.text(item.label, 28, yPosition);
-          yPosition += 8;
-        } else {
-          // Textfält
-          doc.setFont("helvetica", "normal");
-          doc.text(`${item.label}: ${item.value || '-'}`, 20, yPosition);
-          yPosition += 8;
-        }
-        
-        // Lägg till anteckningar om det finns
-        if (item.notes && item.notes.trim() !== '') {
-          doc.setFont("helvetica", "italic");
-          const notes = item.notes;
-          const splitNotes = doc.splitTextToSize(notes, pageWidth - 50);
-          doc.text(splitNotes, 25, yPosition);
-          yPosition += splitNotes.length * 7;
-          doc.setFont("helvetica", "normal");
-        }
-        
-        // Lägg till bilder om det finns
-        if (Array.isArray(item.images) && item.images.length > 0) {
-          yPosition += 3;
-          
-          // Bildöverskrift
-          doc.setFont("helvetica", "bold");
-          doc.text("Bilder:", 20, yPosition);
-          doc.setFont("helvetica", "normal");
-          
-          yPosition += 7;
-          
-          // Centrera bilder
-          for (let i = 0; i < item.images.length; i++) {
-            const image = item.images[i];
-            
-            // Kontrollera om vi behöver en ny sida för den här bilden
-            if (yPosition + maxImageHeight/2 > pageHeight - 20) {
-              doc.addPage();
-              yPosition = 20;
-            }
-            
-            // Försök lägga till bilden
-            if (image.url && imageCache[image.url]) {
-              try {
-                const imageData = imageCache[image.url];
-                
-                // Beräkna dimensioner som behåller proportioner
-                let imgWidth = maxImageWidth;
-                let imgHeight = maxImageHeight;
-                
-                // Justera storleken för att behålla proportioner
-                if (imageData.width && imageData.height) {
-                  const aspectRatio = imageData.width / imageData.height;
-                  
-                  if (aspectRatio > 1) {
-                    // Bred bild
-                    imgHeight = imgWidth / aspectRatio;
-                  } else {
-                    // Hög bild
-                    imgWidth = imgHeight * aspectRatio;
-                  }
-                  
-                  // Ytterligare justering om bilden är för stor
-                  if (imgWidth > maxImageWidth) {
-                    const ratio = maxImageWidth / imgWidth;
-                    imgWidth *= ratio;
-                    imgHeight *= ratio;
-                  }
-                  
-                  if (imgHeight > maxImageHeight) {
-                    const ratio = maxImageHeight / imgHeight;
-                    imgWidth *= ratio;
-                    imgHeight *= ratio;
-                  }
-                }
-                
-                // Centrera bilden horisontellt
-                const xPos = (pageWidth - imgWidth) / 2;
-                
-                // Lägg till bilden med bevarade proportioner
-                doc.addImage(
-                  imageData.dataUrl, 
-                  'JPEG', 
-                  xPos, 
-                  yPosition, 
-                  imgWidth, 
-                  imgHeight
-                );
-                
-                // Lägg till etikett under bilden
-                doc.setFontSize(9);
-                doc.text(`Bild ${i+1}`, pageWidth / 2, yPosition + imgHeight + 5, { align: 'center' });
-                doc.setFontSize(11);
-                
-                // Uppdatera position
-                yPosition += imgHeight + 10;
-                
-              } catch (err) {
-                console.error('Kunde inte lägga till bild i PDF:', err);
-                
-                // Lägg till placeholder om bilden inte kunde laddas
-                doc.setFillColor(240, 240, 240);
-                doc.rect(pageWidth/2 - 40, yPosition, 80, 30, 'F');
-                doc.setFontSize(9);
-                doc.text(`Bild ${i+1}`, pageWidth / 2, yPosition + 15, { align: 'center' });
-                doc.setFontSize(11);
-                
-                yPosition += 40;
-              }
-            } else {
-              // Bild kunde inte laddas, lägg till placeholder
-              doc.setFillColor(240, 240, 240);
-              doc.rect(pageWidth/2 - 40, yPosition, 80, 30, 'F');
-              doc.setFontSize(9);
-              doc.text(`Bild ${i+1}`, pageWidth / 2, yPosition + 15, { align: 'center' });
-              doc.setFontSize(11);
-              
-              yPosition += 40;
-            }
-          }
-        }
-        
-        // Mindre mellanrum mellan frågorna
-        yPosition += 2;
-      }
-    }
-    
-    // ===== UNDERSKRIFTER =====
-    
-    // Lägg till underskriftsfält i slutet
-    if (yPosition > pageHeight - 60) {
-      doc.addPage();
-      yPosition = 30;
-    } else {
-      yPosition += 20;
-    }
-    
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("Underskrifter", 14, yPosition);
-    yPosition += 20;
-    
-    // Linjer för underskrifter
-    doc.line(30, yPosition, 85, yPosition); // Kontrollansvarig
-    doc.line(pageWidth - 85, yPosition, pageWidth - 30, yPosition); // Kund
-    
-    doc.setFont("helvetica", "normal");
-    doc.text("Kontrollansvarig", 30, yPosition + 10);
-    doc.text("Kund", pageWidth - 85, yPosition + 10);
-    
-    // ===== SIDFOT =====
-    
-    // Lägg till sidnummer på alla sidor
-    const pageCount = doc.internal.getNumberOfPages();
-    const currentDate = new Date().toLocaleDateString();
-    
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.text(`Kontroll - Sida ${i} av ${pageCount}`, 14, pageHeight - 10);
-      doc.text(currentDate, pageWidth - 14, pageHeight - 10, { align: 'right' });
-    }
-    
-    return doc;
-  } catch (err) {
-    console.error('Error generating PDF:', err);
-    alert('Ett fel uppstod när PDF-dokumentet skulle skapas: ' + err.message);
-    return null;
-  } finally {
-    setGeneratingPdf(false);
-  }
-};
-
-  const handleGeneratePDF = async () => {
-    const doc = await generateInspectionPDF();
-    if (doc) {
-      // Spara PDF-filen
-      doc.save(`Besiktning_${installationId}_${new Date().toISOString().split('T')[0]}.pdf`);
+      console.error('Error uploading image:', err);
+      alert(`Kunde inte ladda upp bild: ${err.message}`);
+    } finally {
+      setUploadingImages(prev => ({ ...prev, [uploadKey]: false }));
     }
   };
 
-// Komponent för bildmodal
+  const handleDeleteImage = async (sectionIndex, itemIndex, imageIndex) => {
+    try {
+      const updatedInspection = { ...inspection };
+      const images = updatedInspection.sections[sectionIndex].items[itemIndex].images;
+      const imageToDelete = images[imageIndex];
+      
+      // Delete from storage
+      if (imageToDelete.path) {
+        await supabase.storage.from('inspections').remove([imageToDelete.path]);
+      }
+      
+      // Remove from state
+      images.splice(imageIndex, 1);
+      setInspection(updatedInspection);
+      setActiveImageModal(null);
+      
+      // Save to Firestore
+      await saveInspection(updatedInspection);
+      
+    } catch (err) {
+      console.error('Error deleting image:', err);
+      setError('Kunde inte ta bort bilden');
+    }
+  };
+
+  const generatePDF = async () => {
+    if (!inspection || !installation || !customer || !address) {
+      alert('Kunde inte generera PDF: Data saknas');
+      return;
+    }
+    
+    setGeneratingPdf(true);
+    
+    try {
+      // Hämta användarprofil för logotyp (om du har implementerat det)
+      const userProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
+      
+      // Använd den externa PDF-generatorn
+      const doc = await generateInspectionPDF(inspection, installation, customer, address, userProfile);
+      
+      if (doc) {
+        // Skapa professionellt filnamn
+        const customerName = customer.name.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const installationName = installation.name.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const currentDate = new Date().toISOString().split('T')[0];
+        const fileName = `Kontrollrapport_${customerName}_${installationName}_${currentDate}.pdf`;
+        
+        doc.save(fileName);
+        
+        // Bekräftelse
+        alert('PDF-rapport har genererats och laddats ner!');
+      }
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      alert('Ett fel uppstod när PDF-dokumentet skulle skapas: ' + err.message);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  // Image Modal Component
   const ImageModal = ({ image, onClose, onDelete }) => {
+    if (!image) return null;
+
     return (
-      <div className="image-modal-overlay" onClick={onClose}>
-        <div className="image-modal-content" onClick={e => e.stopPropagation()}>
-          <div className="image-modal-header">
-            <h3>{image.name}</h3>
-            <button className="modal-close-button" onClick={onClose}>&times;</button>
+      <div 
+        style={{
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          right: '0',
+          bottom: '0',
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: '1000',
+          padding: windowWidth <= 480 ? '10px' : '20px',
+          boxSizing: 'border-box',
+          overflowX: 'hidden',
+          overflowY: 'auto'
+        }}
+        onClick={onClose}
+      >
+        <div 
+          style={{
+            background: 'white',
+            borderRadius: '12px',
+            width: windowWidth <= 480 ? 'calc(100vw - 20px)' : '90vw',
+            maxWidth: windowWidth <= 480 ? 'calc(100vw - 20px)' : '90vw',
+            maxHeight: windowWidth <= 480 ? 'calc(100vh - 20px)' : '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            margin: '0 auto',
+            boxSizing: 'border-box'
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{
+            padding: windowWidth <= 480 ? '12px' : '16px',
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <h3 style={{ 
+              margin: '0', 
+              fontSize: windowWidth <= 480 ? '16px' : '18px', 
+              fontWeight: '600',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1,
+              marginRight: '10px'
+            }}>
+              {image.name}
+            </h3>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: windowWidth <= 480 ? '20px' : '24px',
+                cursor: 'pointer',
+                padding: '4px',
+                minWidth: '32px',
+                minHeight: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ×
+            </button>
           </div>
-          <div className="image-modal-body">
-            <img src={image.url} alt={image.name} className="modal-image" />
+          
+          <div style={{ 
+            padding: windowWidth <= 480 ? '12px' : '16px', 
+            textAlign: 'center',
+            flex: 1,
+            overflow: 'auto'
+          }}>
+            <img 
+              src={image.url} 
+              alt={image.name}
+              style={{
+                maxWidth: '100%',
+                maxHeight: windowWidth <= 480 ? '60vh' : '70vh',
+                objectFit: 'contain'
+              }}
+            />
           </div>
-          <div className="image-modal-footer">
-            <button className="button primary" onClick={() => window.open(image.url, '_blank')}>
-              Öppna i nytt fönster
+          
+          <div style={{
+            padding: windowWidth <= 480 ? '12px' : '16px',
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            gap: windowWidth <= 480 ? '8px' : '12px',
+            justifyContent: 'flex-end',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              onClick={() => window.open(image.url, '_blank')}
+              style={{
+                padding: windowWidth <= 480 ? '10px 14px' : '8px 16px',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: windowWidth <= 480 ? '13px' : '14px',
+                cursor: 'pointer',
+                minHeight: '44px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {windowWidth <= 480 ? 'Öppna' : 'Öppna i nytt fönster'}
             </button>
             {onDelete && (
-              <button className="button danger" onClick={onDelete}>
+              <button
+                onClick={onDelete}
+                style={{
+                  padding: windowWidth <= 480 ? '10px 14px' : '8px 16px',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: windowWidth <= 480 ? '13px' : '14px',
+                  cursor: 'pointer',
+                  minHeight: '44px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
                 Ta bort bild
               </button>
             )}
@@ -1190,420 +650,1250 @@ doc.setTextColor(0, 0, 0);
     );
   };
 
-  if (loading) return <div>Laddar...</div>;
-  if (error) return <div className="error-message">{error}</div>;
-  if (!inspection) return <div>Kontrollen hittades inte</div>;
+  // Loading state
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '50vh',
+        flexDirection: 'column',
+        gap: '16px'
+      }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          border: '4px solid #f3f4f6',
+          borderTop: '4px solid #3b82f6',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{ color: '#6b7280', fontSize: '16px' }}>Laddar kontroll...</p>
+      </div>
+    );
+  }
 
-  return (
-    <div className="inspection-detail">
-<div className="inspection-header">
-  <div className="inspection-title">
-    <h2>Kontroll {inspection.status === 'completed' ? '(Slutförd)' : '(Pågående)'}</h2>
-    
-    {editingName ? (
-      <div className="name-edit-container">
-        <input
-          type="text"
-          value={editedName}
-          onChange={(e) => setEditedName(e.target.value)}
-          autoFocus
-          className="name-edit-input"
-        />
-        <div className="name-edit-actions">
-          <button 
-            onClick={() => setEditingName(false)}
-            className="button secondary small"
-            disabled={saving}
-          >
-            Avbryt
-          </button>
-          <button 
-            onClick={handleSaveName}
-            className="button primary small"
-            disabled={saving}
-          >
-            {saving ? 'Sparar...' : 'Spara'}
-          </button>
+  // Error state
+  if (error || !inspection) {
+    return (
+      <div style={{
+        maxWidth: '800px',
+        margin: '40px auto',
+        padding: windowWidth <= 480 ? '20px' : '32px',
+        background: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          width: '64px',
+          height: '64px',
+          background: '#fee2e2',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 16px'
+        }}>
+          <span style={{ fontSize: '24px', color: '#dc2626' }}>⚠</span>
         </div>
-      </div>
-    ) : (
-      <div 
-        className={`inspection-name-display ${inspection.status !== 'completed' ? 'editable' : ''}`}
-        onClick={() => inspection.status !== 'completed' && toggleNameEdit()}
-      >
-        <span className="name-label">Namn:</span>
-        <span className="name-value">
-          {inspection.name || 'Namnlös kontroll'}
-          {inspection.status !== 'completed' && (
-            <span className="edit-indicator"></span>
-          )}
-        </span>
-      </div>
-    )}
-  </div>
-  
-  <div className="action-buttons">
-    {!editMode && !editingQuestions ? (
-      <>
-        {inspection.status !== 'completed' && (
-          <>
-            <button
-              onClick={() => setEditMode(true)}
-              className="button secondary"
-              disabled={saving}
-            >
-              Redigera svar
-            </button>&nbsp;
-            <button
-              onClick={toggleEditingQuestions}
-              className="button secondary"
-              disabled={saving}
-            >
-              Redigera frågor
-            </button>&nbsp;
-            <button
-              onClick={completeInspection}
-              className="button primary"
-              disabled={saving}
-            >
-              Slutför kontroll
-            </button>
-          </>
-        )}
-        <button
-          onClick={() => setSavingAsNewTemplate(true)}
-          className="button secondary"
-          disabled={saving}
-        >
-          Spara som mall
-        </button>&nbsp;
-        <button
-          onClick={handleDelete}
-          className="button danger"
-          disabled={saving}
-        >
-          Ta bort
-        </button>
-      </>
-    ) : (
-      <>
-        <button 
-          onClick={() => {
-            setEditMode(false);
-            setEditingQuestions(false);
+        <h2 style={{ 
+          fontSize: windowWidth <= 480 ? '20px' : '24px', 
+          fontWeight: '600', 
+          color: '#111827', 
+          marginBottom: '8px' 
+        }}>
+          {error || 'Kontrollen hittades inte'}
+        </h2>
+        <p style={{ 
+          color: '#6b7280', 
+          fontSize: windowWidth <= 480 ? '14px' : '16px', 
+          marginBottom: '24px',
+          lineHeight: '1.5'
+        }}>
+          {error || 'Den kontroll du söker efter finns inte eller har tagits bort.'}
+        </p>
+        <Link 
+          to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: windowWidth <= 480 ? '14px 20px' : '12px 24px',
+            background: '#3b82f6',
+            color: 'white',
+            textDecoration: 'none',
+            borderRadius: '8px',
+            fontSize: windowWidth <= 480 ? '13px' : '14px',
+            fontWeight: '500',
+            minHeight: '44px'
           }}
-          className="button secondary"
-          disabled={saving}
         >
-          Avbryt
-        </button>
-        <button 
-          onClick={handleSave}
-          className="button primary"
-          disabled={saving}
-        >
-          {saving ? 'Sparar...' : 'Spara ändringar'}
-        </button>
-      </>
-    )}
-  </div>
-</div>
+          ← Tillbaka till installation
+        </Link>
+      </div>
+    );
+  }
 
-      {savingAsNewTemplate && (
-        <div className="save-template-modal">
-          <div className="save-template-form">
-            <h3>Spara som ny mall</h3>
-            <div className="form-group">
-              <label htmlFor="newTemplateName">Mallnamn:</label>
+  const isCompleted = inspection.status === 'completed';
+
+  // Main component render
+  return (
+    <div style={{
+      width: '100%',
+      maxWidth: windowWidth <= 768 ? '100vw' : '1200px',
+      margin: '0 auto',
+      padding: windowWidth <= 768 ? '16px' : '24px',
+      background: '#f8fafc',
+      minHeight: '100vh',
+      boxSizing: 'border-box',
+      overflowX: 'hidden'
+    }}>
+      {/* CSS för spinner och mobile optimizations */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          
+          /* Mobile Centering och Layout Fix */
+          @media (max-width: 768px) {
+            body {
+              overflow-x: hidden !important;
+            }
+            
+            * {
+              box-sizing: border-box !important;
+            }
+          }
+          
+          @media (max-width: 480px) {
+            button {
+              min-height: 44px !important;
+              min-width: 44px !important;
+              box-sizing: border-box !important;
+            }
+            
+            input, textarea, select {
+              font-size: 16px !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              box-sizing: border-box !important;
+            }
+            
+            .modal-content {
+              margin: 10px !important;
+              max-width: calc(100vw - 20px) !important;
+              width: calc(100vw - 20px) !important;
+              box-sizing: border-box !important;
+            }
+          }
+          
+          @media (max-width: 360px) {
+            .button-group {
+              flex-direction: column !important;
+            }
+            
+            .button-group button {
+              width: 100% !important;
+              margin-bottom: 8px !important;
+              box-sizing: border-box !important;
+            }
+            
+            .button-group button:last-child {
+              margin-bottom: 0 !important;
+            }
+          }
+        `}
+      </style>
+
+      {/* Header Card */}
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: windowWidth <= 768 ? '20px' : '32px',
+        marginBottom: '20px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        border: '1px solid #e2e8f0',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box'
+      }}>
+        {/* Breadcrumb */}
+        <div style={{ marginBottom: windowWidth <= 768 ? '16px' : '24px' }}>
+          <Link 
+            to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: '#3b82f6',
+              textDecoration: 'none',
+              fontSize: windowWidth <= 768 ? '12px' : '14px',
+              fontWeight: '500'
+            }}
+          >
+            ← Tillbaka till installation
+          </Link>
+        </div>
+
+        {/* Title Section */}
+        <div style={{ marginBottom: '24px' }}>
+          {editingName ? (
+            <div style={{ 
+              marginBottom: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
               <input
                 type="text"
-                id="newTemplateName"
-                value={newTemplateName}
-                onChange={(e) => setNewTemplateName(e.target.value)}
-                required
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                style={{
+                  fontSize: windowWidth <= 768 ? '24px' : '32px',
+                  fontWeight: '700',
+                  border: '2px solid #3b82f6',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  width: '100%',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+                autoFocus
               />
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px',
+                flexWrap: 'wrap',
+                flexDirection: windowWidth <= 360 ? 'column-reverse' : 'row'
+              }}>
+                <button
+                  onClick={handleSaveName}
+                  disabled={saving}
+                  style={{
+                    padding: windowWidth <= 480 ? '12px 16px' : '8px 16px',
+                    background: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    flex: windowWidth <= 480 ? '1' : 'none',
+                    minHeight: '44px',
+                    width: windowWidth <= 360 ? '100%' : 'auto'
+                  }}
+                >
+                  {saving ? 'Sparar...' : 'Spara'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditedName(inspection.name || inspection.templateName || '');
+                    setEditingName(false);
+                  }}
+                  style={{
+                    padding: windowWidth <= 480 ? '12px 16px' : '8px 16px',
+                    background: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    flex: windowWidth <= 480 ? '1' : 'none',
+                    minHeight: '44px',
+                    width: windowWidth <= 360 ? '100%' : 'auto'
+                  }}
+                >
+                  Avbryt
+                </button>
+              </div>
             </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                onClick={() => setSavingAsNewTemplate(false)}
-                className="button secondary"
+          ) : (
+            <div style={{ marginBottom: '16px' }}>
+              <h1 
+                style={{
+                  fontSize: windowWidth <= 768 ? '24px' : '32px',
+                  fontWeight: '700',
+                  color: '#111827',
+                  margin: '0 0 8px 0',
+                  cursor: !isCompleted ? 'pointer' : 'default',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  lineHeight: '1.2',
+                  wordBreak: 'break-word'
+                }}
+                onClick={() => !isCompleted && setEditingName(true)}
+                title={!isCompleted ? 'Klicka för att redigera namn' : ''}
               >
-                Avbryt
-              </button>
-              <button
-                type="button"
-                onClick={saveAsNewTemplate}
-                className="button primary"
-                disabled={saving}
-              >
-                {saving ? 'Sparar...' : 'Spara mall'}
-              </button>
+                {inspection.name || inspection.templateName || 'Namnlös kontroll'}
+                {!isCompleted && (
+                  <span style={{ fontSize: '16px', opacity: '0.5' }}>✏️</span>
+                )}
+              </h1>
+              
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                fontSize: '14px',
+                fontWeight: '500',
+                background: isCompleted ? '#dcfce7' : '#fef3c7',
+                color: isCompleted ? '#166534' : '#92400e'
+              }}>
+                {isCompleted ? 'Slutförd' : 'Pågående'}
+              </div>
             </div>
+          )}
+
+          {/* Action Buttons - Mobile Responsive */}
+          <div className="button-group" style={{ 
+            display: 'flex', 
+            gap: windowWidth <= 480 ? '6px' : '8px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            flexDirection: windowWidth <= 360 ? 'column' : 'row',
+            width: windowWidth <= 360 ? '100%' : 'auto'
+          }}>
+            <button
+              onClick={generatePDF}
+              disabled={generatingPdf}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: windowWidth <= 360 ? '12px' : windowWidth <= 480 ? '8px 10px' : '12px 20px',
+                background: '#8b5cf6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: windowWidth <= 480 ? '12px' : '14px',
+                fontWeight: '500',
+                cursor: generatingPdf ? 'not-allowed' : 'pointer',
+                minWidth: 'fit-content',
+                whiteSpace: 'nowrap',
+                width: windowWidth <= 360 ? '100%' : 'auto',
+                justifyContent: 'center',
+                minHeight: '44px'
+              }}
+            >
+              {generatingPdf ? 'Skapar...' : windowWidth <= 480 ? 'PDF' : 'Generera PDF'}
+            </button>
+
+            {!editMode && !isCompleted && (
+              <button
+                onClick={() => setEditMode(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: windowWidth <= 360 ? '12px' : windowWidth <= 480 ? '8px 10px' : '12px 20px',
+                  background: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: windowWidth <= 480 ? '12px' : '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                  width: windowWidth <= 360 ? '100%' : 'auto',
+                  justifyContent: 'center',
+                  minHeight: '44px'
+                }}
+              >
+                {windowWidth <= 480 ? 'Redigera' : 'Redigera kontroll'}
+              </button>
+            )}
+
+            {editMode && (
+              <button
+                onClick={() => setEditMode(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: windowWidth <= 360 ? '12px' : windowWidth <= 480 ? '8px 10px' : '12px 20px',
+                  background: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: windowWidth <= 480 ? '12px' : '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                  width: windowWidth <= 360 ? '100%' : 'auto',
+                  justifyContent: 'center',
+                  minHeight: '44px'
+                }}
+              >
+                {windowWidth <= 480 ? 'Visa' : 'Visa läge'}
+              </button>
+            )}
+
+            {!isCompleted ? (
+              <button
+                onClick={handleMarkComplete}
+                disabled={updating}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: windowWidth <= 360 ? '12px' : windowWidth <= 480 ? '8px 10px' : '12px 20px',
+                  background: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: windowWidth <= 480 ? '12px' : '14px',
+                  fontWeight: '500',
+                  cursor: updating ? 'not-allowed' : 'pointer',
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                  width: windowWidth <= 360 ? '100%' : 'auto',
+                  justifyContent: 'center',
+                  minHeight: '44px'
+                }}
+              >
+                {updating ? 'Slutför...' : windowWidth <= 360 ? 'Slutför' : windowWidth <= 480 ? 'Slutför' : 'Markera slutförd'}
+              </button>
+            ) : (
+              <button
+                onClick={handleReopen}
+                disabled={updating}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: windowWidth <= 360 ? '12px' : windowWidth <= 480 ? '8px 10px' : '12px 20px',
+                  background: '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: windowWidth <= 480 ? '12px' : '14px',
+                  fontWeight: '500',
+                  cursor: updating ? 'not-allowed' : 'pointer',
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                  width: windowWidth <= 360 ? '100%' : 'auto',
+                  justifyContent: 'center',
+                  minHeight: '44px'
+                }}
+              >
+                {updating ? 'Återöppnar...' : 'Återöppna'}
+              </button>
+            )}
+
+            <button
+              onClick={handleDelete}
+              disabled={updating}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: windowWidth <= 360 ? '12px' : windowWidth <= 480 ? '8px 10px' : '12px 20px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: windowWidth <= 480 ? '12px' : '14px',
+                fontWeight: '500',
+                cursor: updating ? 'not-allowed' : 'pointer',
+                minWidth: 'fit-content',
+                whiteSpace: 'nowrap',
+                width: windowWidth <= 360 ? '100%' : 'auto',
+                justifyContent: 'center',
+                minHeight: '44px'
+              }}
+            >
+              Ta bort
+            </button>
           </div>
         </div>
-      )}
 
-      <div className="inspection-info">
-        
-        <p><strong>Anläggning:</strong> {installation ? installation.name : 'Okänd'}</p>
-        <p><strong>Mall:</strong> {template ? template.name : 'Okänd'}</p>
-        <p>
-          <strong>Status:</strong> 
-          <span className={`status ${inspection.status === 'completed' ? 'completed' : 'pending'}`}>
-            {inspection.status === 'completed' ? 'Slutförd' : 'Pågående'}
-          </span>
-        </p>
-        {inspection.completedAt && (
-          <p><strong>Slutförd:</strong> {new Date(inspection.completedAt.seconds * 1000).toLocaleString()}</p>
-        )}
+        {/* Info Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: windowWidth <= 768 ? '1fr' : 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '12px',
+          padding: '16px',
+          background: '#f8fafc',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div>
+            <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500' }}>Kund</span>
+            <p style={{ 
+              fontSize: windowWidth <= 480 ? '14px' : '16px', 
+              fontWeight: '600', 
+              color: '#111827', 
+              margin: '4px 0 0',
+              wordBreak: 'break-word'
+            }}>
+              {customer?.name || 'Okänd kund'}
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500' }}>Adress</span>
+            <p style={{ 
+              fontSize: windowWidth <= 480 ? '14px' : '16px', 
+              fontWeight: '600', 
+              color: '#111827', 
+              margin: '4px 0 0',
+              wordBreak: 'break-word'
+            }}>
+              {address?.street || 'Okänd adress'}
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500' }}>Installation</span>
+            <p style={{ 
+              fontSize: windowWidth <= 480 ? '14px' : '16px', 
+              fontWeight: '600', 
+              color: '#111827', 
+              margin: '4px 0 0',
+              wordBreak: 'break-word'
+            }}>
+              {installation?.name || 'Okänd installation'}
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500' }}>Skapad</span>
+            <p style={{ 
+              fontSize: windowWidth <= 480 ? '14px' : '16px', 
+              fontWeight: '600', 
+              color: '#111827', 
+              margin: '4px 0 0'
+            }}>
+              {inspection.createdAt?.seconds ? 
+                new Date(inspection.createdAt.seconds * 1000).toLocaleDateString('sv-SE') : 
+                'Okänt datum'
+              }
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="inspection-checklist">
-        {inspection.sections.map((section, sectionIndex) => (
-          <div key={sectionIndex} className="inspection-section">
-            <h3>{section.title}</h3>
-            
-            <div className="section-items">
-              {section.items.map((item, itemIndex) => (
-                <div 
-                  key={item.id} 
-                  className="checklist-item"
-                  ref={el => sectionRefs.current[`${sectionIndex}-${itemIndex}`] = el}
-                >
-                  {item.type === 'header' ? (
-                    <div className="header-item">
-                      {editingQuestions ? (
-                        <div className="edit-header">
-                          <input
-                            type="text"
-                            value={item.label}
-                            onChange={(e) => handleEditItem(sectionIndex, itemIndex, e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeItem(sectionIndex, itemIndex)}
-                            className="button danger small"
-                          >
-                            Ta bort
-                          </button>
-                        </div>
-                      ) : (
-                        <h4>{item.label}</h4>
-                      )}
+{/* Sections */}
+      {inspection.sections && inspection.sections.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {inspection.sections.map((section, sectionIndex) => (
+            <div 
+              key={sectionIndex}
+              style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: windowWidth <= 480 ? '20px' : '32px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                border: '1px solid #e2e8f0',
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}
+            >
+              {/* Sektion rubrik med redigeringsmöjlighet */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: windowWidth <= 768 ? 'flex-start' : 'center',
+                flexDirection: windowWidth <= 768 ? 'column' : 'row',
+                gap: windowWidth <= 768 ? '16px' : '0',
+                marginBottom: '24px',
+                paddingBottom: '12px',
+                borderBottom: '2px solid #e2e8f0'
+              }}>
+                {editingSection === sectionIndex ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: windowWidth <= 480 ? '8px' : '12px', 
+                    flex: 1,
+                    flexDirection: windowWidth <= 480 ? 'column' : 'row',
+                    width: '100%'
+                  }}>
+                    <input
+                      type="text"
+                      value={section.name}
+                      onChange={(e) => {
+                        const updatedInspection = { ...inspection };
+                        updatedInspection.sections[sectionIndex].name = e.target.value;
+                        setInspection(updatedInspection);
+                      }}
+                      style={{
+                        fontSize: windowWidth <= 480 ? '20px' : '24px',
+                        fontWeight: '600',
+                        border: '2px solid #3b82f6',
+                        borderRadius: '8px',
+                        padding: windowWidth <= 480 ? '10px' : '8px 12px',
+                        flex: 1,
+                        outline: 'none',
+                        width: windowWidth <= 480 ? '100%' : 'auto',
+                        boxSizing: 'border-box'
+                      }}
+                      autoFocus
+                    />
+                    <div style={{
+                      display: 'flex',
+                      gap: '8px',
+                      width: windowWidth <= 480 ? '100%' : 'auto'
+                    }}>
+                      <button
+                        onClick={() => {
+                          handleEditSectionName(sectionIndex, section.name);
+                        }}
+                        style={{
+                          padding: windowWidth <= 480 ? '12px 16px' : '8px 16px',
+                          background: '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          flex: windowWidth <= 480 ? '1' : 'none',
+                          minHeight: '44px'
+                        }}
+                      >
+                        Spara
+                      </button>
+                      <button
+                        onClick={() => setEditingSection(null)}
+                        style={{
+                          padding: windowWidth <= 480 ? '12px 16px' : '8px 16px',
+                          background: '#6b7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          flex: windowWidth <= 480 ? '1' : 'none',
+                          minHeight: '44px'
+                        }}
+                      >
+                        Avbryt
+                      </button>
                     </div>
-                  ) : item.type === 'yesno' ? (
-                    <div className="yesno-item">
-                      {editingQuestions ? (
-                        <div className="edit-label">
-                          <input
-                            type="text"
-                            value={item.label}
-                            onChange={(e) => handleEditItem(sectionIndex, itemIndex, e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeItem(sectionIndex, itemIndex)}
-                            className="button danger small"
-                          >
-                            Ta bort
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="item-label">
-                          {item.label}
-                          {item.required && <span className="required">*</span>}
-                        </label>
+                  </div>
+                ) : (
+                  <>
+                    <h2 
+                      style={{
+                        fontSize: windowWidth <= 480 ? '20px' : '24px',
+                        fontWeight: '600',
+                        color: '#111827',
+                        margin: '0',
+                        cursor: editMode ? 'pointer' : 'default',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        wordBreak: 'break-word',
+                        flex: 1
+                      }}
+                      onClick={() => editMode && setEditingSection(sectionIndex)}
+                      title={editMode ? 'Klicka för att redigera sektionsnamn' : ''}
+                    >
+                      {section.name}
+                      {editMode && (
+                        <span style={{ fontSize: '16px', opacity: '0.5' }}>✏️</span>
                       )}
-                      
-                      <div className="radio-options">
-                        {editMode ? (
-                          <>
-                            <label className="radio-label">
-                              <input
-                                type="radio"
-                                name={`yesno-${item.id}`}
-                                checked={item.value === "yes"}
-                                onChange={() => handleItemChange(sectionIndex, itemIndex, 'value', "yes")}
-                                disabled={inspection.status === 'completed'}
-                              />
-                              Ja
-                            </label>
-                            <label className="radio-label">
-                              <input
-                                type="radio"
-                                name={`yesno-${item.id}`}
-                                checked={item.value === "no"}
-                                onChange={() => handleItemChange(sectionIndex, itemIndex, 'value', "no")}
-                                disabled={inspection.status === 'completed'}
-                              />
-                              Nej
-                            </label>
-                          </>
-                        ) : (
-                          <>
-                            <label className="radio-label">
-                              <input
-                                type="radio"
-                                name={`yesno-${item.id}`}
-                                checked={item.value === "yes"}
-                                disabled
-                              />
-                              Ja
-                            </label>
-                            <label className="radio-label">
-                              <input
-                                type="radio"
-                                name={`yesno-${item.id}`}
-                                checked={item.value === "no"}
-                                disabled
-                              />
-                              Nej
-                            </label>
-                          </>
+                    </h2>
+                    
+                    {editMode && (
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: windowWidth <= 480 ? '4px' : '8px',
+                        flexWrap: 'wrap',
+                        justifyContent: windowWidth <= 480 ? 'center' : 'flex-end',
+                        width: windowWidth <= 768 ? '100%' : 'auto'
+                      }}>
+                        <button
+                          onClick={() => setActiveSectionForNewItem(
+                            activeSectionForNewItem === sectionIndex ? null : sectionIndex
+                          )}
+                          style={{
+                            padding: windowWidth <= 480 ? '6px 8px' : '6px 12px',
+                            background: activeSectionForNewItem === sectionIndex ? '#10b981' : '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: windowWidth <= 480 ? '11px' : '12px',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            minHeight: '36px'
+                          }}
+                        >
+                          {activeSectionForNewItem === sectionIndex ? 'Avbryt' : windowWidth <= 480 ? '+ Fråga' : 'Lägg till fråga'}
+                        </button>
+                        
+                        <button
+                          onClick={() => removeSection(sectionIndex)}
+                          style={{
+                            padding: windowWidth <= 480 ? '6px 8px' : '6px 12px',
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: windowWidth <= 480 ? '11px' : '12px',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            minHeight: '36px'
+                          }}
+                        >
+                          {windowWidth <= 480 ? 'Ta bort' : 'Ta bort sektion'}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              
+              {/* Formulär för att lägga till ny fråga i denna sektion */}
+              {activeSectionForNewItem === sectionIndex && (
+                <div style={{
+                  background: '#f0f9ff',
+                  border: '2px solid #0ea5e9',
+                  borderRadius: '12px',
+                  padding: windowWidth <= 480 ? '16px' : '20px',
+                  marginBottom: '20px'
+                }}>
+                  <h4 style={{ 
+                    margin: '0 0 16px 0', 
+                    color: '#0369a1',
+                    fontSize: windowWidth <= 480 ? '16px' : '18px'
+                  }}>
+                    {windowWidth <= 480 ? 'Ny fråga' : `Lägg till ny fråga i "${section.name}"`}
+                  </h4>
+                  
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: windowWidth <= 480 ? '10px' : '12px' 
+                  }}>
+                    <div>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '4px', 
+                        fontWeight: '500',
+                        fontSize: windowWidth <= 480 ? '13px' : '14px'
+                      }}>
+                        Frågetext:
+                      </label>
+                      <input
+                        type="text"
+                        value={newItemLabel}
+                        onChange={(e) => setNewItemLabel(e.target.value)}
+                        placeholder="Ange din fråga här..."
+                        style={{
+                          width: '100%',
+                          padding: windowWidth <= 480 ? '12px' : '8px 12px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: windowWidth <= 480 ? '16px' : '14px',
+                          boxSizing: 'border-box',
+                          minHeight: '44px'
+                        }}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '4px', 
+                        fontWeight: '500',
+                        fontSize: windowWidth <= 480 ? '13px' : '14px'
+                      }}>
+                        Frågetyp:
+                      </label>
+                      <select
+                        value={newItemType}
+                        onChange={(e) => setNewItemType(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: windowWidth <= 480 ? '12px' : '8px 12px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: windowWidth <= 480 ? '16px' : '14px',
+                          boxSizing: 'border-box',
+                          minHeight: '44px'
+                        }}
+                      >
+                        <option value="yesno">Ja/Nej fråga</option>
+                        <option value="checkbox">Kryssruta</option>
+                        <option value="text">Textfält</option>
+                      </select>
+                    </div>
+                    
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: windowWidth <= 480 ? '6px' : '8px',
+                      justifyContent: 'flex-end',
+                      flexDirection: windowWidth <= 360 ? 'column-reverse' : 'row'
+                    }}>
+                      <button
+                        onClick={() => setActiveSectionForNewItem(null)}
+                        style={{
+                          padding: windowWidth <= 480 ? '12px' : '8px 16px',
+                          background: '#6b7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: windowWidth <= 480 ? '13px' : '14px',
+                          cursor: 'pointer',
+                          width: windowWidth <= 360 ? '100%' : 'auto',
+                          minHeight: '44px'
+                        }}
+                      >
+                        Avbryt
+                      </button>
+                      <button
+                        onClick={() => addNewItem(sectionIndex)}
+                        style={{
+                          padding: windowWidth <= 480 ? '12px' : '8px 16px',
+                          background: '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: windowWidth <= 480 ? '13px' : '14px',
+                          cursor: 'pointer',
+                          width: windowWidth <= 360 ? '100%' : 'auto',
+                          minHeight: '44px'
+                        }}
+                      >
+                        Lägg till fråga
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Items i sektionen */}
+              {section.items && section.items.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {section.items.map((item, itemIndex) => {
+                    const uploadKey = `${sectionIndex}-${itemIndex}`;
+                    const isUploading = uploadingImages[uploadKey];
+                    
+                    return (
+                      <div 
+                        key={itemIndex}
+                        style={{
+                          padding: windowWidth <= 480 ? '20px' : '24px',
+                          background: '#f8fafc',
+                          borderRadius: '12px',
+                          border: '1px solid #e2e8f0',
+                          position: 'relative'
+                        }}
+                      >
+                        {/* Edit/Delete buttons for items */}
+                        {editMode && (
+                          <div style={{
+                            position: 'absolute',
+                            top: windowWidth <= 480 ? '8px' : '12px',
+                            right: windowWidth <= 480 ? '8px' : '12px',
+                            display: 'flex',
+                            gap: '8px'
+                          }}>
+                            <button
+                              onClick={() => removeItem(sectionIndex, itemIndex)}
+                              style={{
+                                padding: windowWidth <= 480 ? '6px 8px' : '4px 8px',
+                                background: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: windowWidth <= 480 ? '10px' : '12px',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                minHeight: '32px',
+                                minWidth: '32px'
+                              }}
+                              title="Ta bort fråga"
+                            >
+                              {windowWidth <= 480 ? '×' : 'Ta bort'}
+                            </button>
+                          </div>
                         )}
-                      </div>
-                      
-                      {/* Anteckningsfält */}
-                      {(item.notes || editMode) && (
-                        <div className="notes-field">
+
+                        {/* Question Label */}
+                        <div style={{
+                          fontSize: windowWidth <= 480 ? '16px' : '18px',
+                          fontWeight: '600',
+                          color: '#111827',
+                          marginBottom: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          paddingRight: editMode ? (windowWidth <= 480 ? '50px' : '80px') : '0'
+                        }}>
                           {editMode ? (
-                            <textarea
-                              placeholder="Anteckningar"
-                              value={item.notes || ''}
-                              onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'notes', e.target.value)}
-                              rows="2"
-                              disabled={inspection.status === 'completed'}
-                            />
-                          ) : (
-                            item.notes && <p className="notes">{item.notes}</p>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Direct Image Handling */}
-                      {item.allowImages && (
-                        <div className="item-images">
-                          {/* Visa uppladdade bilder */}
-                          {Array.isArray(item.images) && item.images.length > 0 && (
-                            <div className="image-gallery">
-                              <p style={{ fontSize: '12px', color: '#666', margin: '0 0 5px 0' }}>
-                                Bilder för sektion {sectionIndex}, fråga {itemIndex}
-                              </p>
-                              {item.images.map((image, imageIndex) => (
-                                <div key={image.uniqueId || imageIndex} className="thumbnail-container">
-                                  <img 
-                                    src={image.url} 
-                                    alt={`Bild ${imageIndex + 1}`} 
-                                    className="image-thumbnail" 
-                                    onClick={() => setActiveImageModal({
-                                      image,
-                                      sectionIndex,
-                                      itemIndex,
-                                      imageIndex
-                                    })}
-                                  />
-                                  {editMode && inspection.status !== 'completed' && (
-                                    <button 
-                                      className="thumbnail-delete" 
-                                      onClick={() => handleDeleteImage(sectionIndex, itemIndex, imageIndex)}
-                                      title="Ta bort bild"
-                                    >
-                                      &times;
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          
-                    {/* Simple Image Upload */}
-                    {item.allowImages && editMode && inspection.status !== 'completed' && (
-                      <div className="image-upload-section">
-                        <h5>Lägg till bild</h5>
-                        <SimpleImageUploader 
-                          inspectionId={inspectionId}
-                          sectionIndex={sectionIndex}
-                          itemIndex={itemIndex}
-                          onImageUploaded={handleSimpleImageUpload}
-                        />
-                      </div>
-                    )}
-                    </div>
-                    )}
-                    </div>
-                  ) : item.type === 'checkbox' ? (
-                    <div className="checkbox-item">
-                      <label>
-                        {editingQuestions ? (
-                          <div className="edit-label">
                             <input
                               type="text"
                               value={item.label}
-                              onChange={(e) => handleEditItem(sectionIndex, itemIndex, e.target.value)}
+                              onChange={(e) => {
+                                const updatedInspection = { ...inspection };
+                                updatedInspection.sections[sectionIndex].items[itemIndex].label = e.target.value;
+                                setInspection(updatedInspection);
+                              }}
+                              onBlur={() => saveInspection()}
+                              style={{
+                                fontSize: windowWidth <= 480 ? '16px' : '18px',
+                                fontWeight: '600',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                padding: windowWidth <= 480 ? '8px' : '4px 8px',
+                                background: 'white',
+                                flex: 1,
+                                boxSizing: 'border-box',
+                                minHeight: '44px'
+                              }}
                             />
-                            <button
-                              type="button"
-                              onClick={() => removeItem(sectionIndex, itemIndex)}
-                              className="button danger small"
-                            >
-                              Ta bort
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            {editMode ? (
-                              <input 
-                                type="checkbox" 
-                                checked={item.value}
-                                onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'value', e.target.checked)}
-                                disabled={inspection.status === 'completed'}
-                              />
-                            ) : (
-                              <input 
-                                type="checkbox" 
-                                checked={item.value} 
-                                disabled 
-                              />
+                          ) : (
+                            item.label
+                          )}
+                          {item.required && (
+                            <span style={{ color: '#ef4444', fontSize: '16px' }}>*</span>
+                          )}
+                        </div>
+
+                        {/* Answer Input/Display */}
+                        <div style={{ marginBottom: '16px' }}>
+                          {item.type === 'yesno' && (
+                            <div style={{ 
+                              display: 'flex', 
+                              gap: windowWidth <= 480 ? '8px' : '12px', 
+                              flexWrap: 'wrap' 
+                            }}>
+                              {editMode ? (
+                                <>
+                                  <button
+                                    onClick={() => handleItemChange(sectionIndex, itemIndex, 'value', true)}
+                                    style={{
+                                      padding: windowWidth <= 480 ? '12px 20px' : '12px 24px',
+                                      border: '2px solid',
+                                      borderColor: item.value === true ? '#10b981' : '#e2e8f0',
+                                      background: item.value === true ? '#10b981' : 'white',
+                                      color: item.value === true ? 'white' : '#374151',
+                                      borderRadius: '8px',
+                                      fontSize: windowWidth <= 480 ? '13px' : '14px',
+                                      fontWeight: '500',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      transition: 'all 0.2s ease',
+                                      minHeight: '44px',
+                                      minWidth: windowWidth <= 480 ? '80px' : '100px'
+                                    }}
+                                  >
+                                    Ja
+                                  </button>
+                                  <button
+                                    onClick={() => handleItemChange(sectionIndex, itemIndex, 'value', false)}
+                                    style={{
+                                      padding: windowWidth <= 480 ? '12px 20px' : '12px 24px',
+                                      border: '2px solid',
+                                      borderColor: item.value === false ? '#ef4444' : '#e2e8f0',
+                                      background: item.value === false ? '#ef4444' : 'white',
+                                      color: item.value === false ? 'white' : '#374151',
+                                      borderRadius: '8px',
+                                      fontSize: windowWidth <= 480 ? '13px' : '14px',
+                                      fontWeight: '500',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      transition: 'all 0.2s ease',
+                                      minHeight: '44px',
+                                      minWidth: windowWidth <= 480 ? '80px' : '100px'
+                                    }}
+                                  >
+                                    Nej
+                                  </button>
+                                </>
+                              ) : (
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: windowWidth <= 480 ? '10px 16px' : '12px 20px',
+                                  borderRadius: '8px',
+                                  fontSize: windowWidth <= 480 ? '14px' : '16px',
+                                  fontWeight: '600',
+                                  background: item.value === true ? '#dcfce7' : 
+                                           item.value === false ? '#fee2e2' : '#f3f4f6',
+                                  color: item.value === true ? '#166534' : 
+                                         item.value === false ? '#dc2626' : '#6b7280'
+                                }}>
+                                  {item.value === true ? 'Ja' : 
+                                   item.value === false ? 'Nej' : 
+                                   'Ej besvarad'}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {item.type === 'checkbox' && (
+                            <div>
+                              {editMode ? (
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '12px',
+                                  cursor: 'pointer',
+                                  fontSize: windowWidth <= 480 ? '14px' : '16px',
+                                  fontWeight: '500',
+                                  padding: windowWidth <= 480 ? '10px' : '12px',
+                                  background: 'white',
+                                  borderRadius: '8px',
+                                  border: '2px solid #e2e8f0',
+                                  transition: 'all 0.2s ease',
+                                  minHeight: '44px'
+                                }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={item.value || false}
+                                    onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'value', e.target.checked)}
+                                    style={{
+                                      width: '20px',
+                                      height: '20px',
+                                      cursor: 'pointer',
+                                      accentColor: '#3b82f6'
+                                    }}
+                                  />
+                                  {item.value ? 'Markerad' : 'Ej markerad'}
+                                </label>
+                              ) : (
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: windowWidth <= 480 ? '10px 16px' : '12px 20px',
+                                  borderRadius: '8px',
+                                  fontSize: windowWidth <= 480 ? '14px' : '16px',
+                                  fontWeight: '600',
+                                  background: item.value ? '#dcfce7' : '#f3f4f6',
+                                  color: item.value ? '#166534' : '#6b7280'
+                                }}>
+                                  {item.value ? 'Markerad' : 'Ej markerad'}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {item.type === 'text' && (
+                            <div>
+                              {editMode ? (
+                                <textarea
+                                  value={item.value || ''}
+                                  onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'value', e.target.value)}
+                                  placeholder="Skriv ditt svar här..."
+                                  style={{
+                                    width: '100%',
+                                    minHeight: windowWidth <= 480 ? '80px' : '100px',
+                                    padding: windowWidth <= 480 ? '12px' : '16px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: windowWidth <= 480 ? '16px' : '14px',
+                                    fontFamily: 'inherit',
+                                    outline: 'none',
+                                    resize: 'vertical',
+                                    transition: 'border-color 0.2s ease',
+                                    boxSizing: 'border-box'
+                                  }}
+                                  onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                                  onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                                />
+                              ) : (
+                                <div style={{
+                                  padding: windowWidth <= 480 ? '12px 16px' : '16px 20px',
+                                  background: item.value ? 'white' : '#f3f4f6',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: '8px',
+                                  fontSize: windowWidth <= 480 ? '13px' : '14px',
+                                  color: item.value ? '#111827' : '#6b7280',
+                                  fontStyle: item.value ? 'normal' : 'italic',
+                                  minHeight: '60px',
+                                  whiteSpace: 'pre-wrap'
+                                }}>
+                                  {item.value || 'Inget svar angivet'}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Notes Section */}
+                        <div style={{ marginBottom: '16px' }}>
+                          <label style={{
+                            display: 'block',
+                            fontSize: windowWidth <= 480 ? '13px' : '14px',
+                            fontWeight: '500',
+                            color: '#374151',
+                            marginBottom: '8px'
+                          }}>
+                            Anteckningar (valfritt)
+                          </label>
+                          {editMode ? (
+                            <textarea
+                              value={item.notes || ''}
+                              onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'notes', e.target.value)}
+                              placeholder="Lägg till anteckningar..."
+                              style={{
+                                width: '100%',
+                                minHeight: windowWidth <= 480 ? '60px' : '80px',
+                                padding: windowWidth <= 480 ? '10px' : '12px',
+                                border: '2px solid #e2e8f0',
+                                borderRadius: '8px',
+                                fontSize: windowWidth <= 480 ? '16px' : '14px',
+                                fontFamily: 'inherit',
+                                outline: 'none',
+                                resize: 'vertical',
+                                transition: 'border-color 0.2s ease',
+                                boxSizing: 'border-box'
+                              }}
+                              onFocus={(e) => e.target.style.borderColor = '#f59e0b'}
+                              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                            />
+                          ) : (
+                            item.notes && (
+                              <div style={{
+                                padding: windowWidth <= 480 ? '10px 12px' : '12px 16px',
+                                background: '#fef7cd',
+                                border: '1px solid #fed7aa',
+                                borderRadius: '8px',
+                                fontSize: windowWidth <= 480 ? '13px' : '14px',
+                                color: '#92400e',
+                                marginTop: '8px'
+                              }}>
+                                <strong>Anteckning:</strong> {item.notes}
+                              </div>
+                            )
+                          )}
+                        </div>
+
+                        {/* Images Section */}
+                        <div>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '12px',
+                            flexDirection: windowWidth <= 480 ? 'column' : 'row',
+                            gap: windowWidth <= 480 ? '12px' : '0'
+                          }}>
+                            <label style={{
+                              fontSize: windowWidth <= 480 ? '13px' : '14px',
+                              fontWeight: '500',
+                              color: '#374151',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              Bilder 
+                              {item.images && item.images.length > 0 && (
+                                <span style={{
+                                  background: '#3b82f6',
+                                  color: 'white',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: windowWidth <= 480 ? '11px' : '12px',
+                                  fontWeight: '600'
+                                }}>
+                                  {item.images.length}
+                                </span>
+                              )}
+                            </label>
+                            
+                            {editMode && (
+                              <div style={{ position: 'relative' }}>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                      handleImageUpload(sectionIndex, itemIndex, file);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  style={{ display: 'none' }}
+                                  id={`file-input-${sectionIndex}-${itemIndex}`}
+                                />
+                                <label
+                                  htmlFor={`file-input-${sectionIndex}-${itemIndex}`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: windowWidth <= 480 ? '4px' : '8px',
+                                    padding: windowWidth <= 480 ? '8px 12px' : '8px 16px',
+                                    background: isUploading ? '#6b7280' : '#3b82f6',
+                                    color: 'white',
+                                    borderRadius: '6px',
+                                    fontSize: windowWidth <= 480 ? '12px' : '14px',
+                                    fontWeight: '500',
+                                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                                    opacity: isUploading ? 0.7 : 1,
+                                    transition: 'all 0.2s ease',
+                                    whiteSpace: 'nowrap',
+                                    minHeight: '36px'
+                                  }}
+                                >
+                                  {isUploading ? 'Laddar...' : windowWidth <= 480 ? '+ Bild' : 'Lägg till bild'}
+                                </label>
+                              </div>
                             )}
-                            {item.label}
-                            {item.required && <span className="required">*</span>}
-                          </>
-                        )}
-                      </label>
-                      
-                      {/* Anteckningsfält */}
-                      {(item.notes || editMode) && (
-                        <div className="notes-field">
-                          {editMode ? (
-                            <textarea
-                              placeholder="Anteckningar"
-                              value={item.notes || ''}
-                              onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'notes', e.target.value)}
-                              rows="2"
-                              disabled={inspection.status === 'completed'}
-                            />
-                          ) : (
-                            item.notes && <p className="notes">{item.notes}</p>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Direct Image Handling */}
-                      {item.allowImages && (
-                        <div className="item-images">
-                          {/* Visa uppladdade bilder */}
-                          {Array.isArray(item.images) && item.images.length > 0 && (
-                            <div className="image-gallery">
-                              <p style={{ fontSize: '12px', color: '#666', margin: '0 0 5px 0' }}>
-                                Bilder för sektion {sectionIndex}, fråga {itemIndex}
-                              </p>
+                          </div>
+
+                          {/* Image Gallery */}
+                          {item.images && item.images.length > 0 && (
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: windowWidth <= 480 ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(180px, 1fr))',
+                              gap: windowWidth <= 480 ? '12px' : '16px',
+                              marginTop: '12px',
+                              width: '100%',
+                              maxWidth: '100%',
+                              overflow: 'hidden'
+                            }}>
                               {item.images.map((image, imageIndex) => (
-                                <div key={image.uniqueId || imageIndex} className="thumbnail-container">
-                                  <img 
-                                    src={image.url} 
-                                    alt={`Bild ${imageIndex + 1}`} 
-                                    className="image-thumbnail" 
+                                <div
+                                  key={image.uniqueId || imageIndex}
+                                  style={{
+                                    position: 'relative',
+                                    borderRadius: '12px',
+                                    overflow: 'hidden',
+                                    border: '1px solid #e2e8f0',
+                                    background: 'white',
+                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.02)';
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                                  }}
+                                >
+                                  <img
+                                    src={image.url}
+                                    alt={`Bild ${imageIndex + 1}`}
+                                    style={{
+                                      width: '100%',
+                                      height: windowWidth <= 480 ? '140px' : '180px',
+                                      objectFit: 'cover',
+                                      cursor: 'pointer'
+                                    }}
                                     onClick={() => setActiveImageModal({
                                       image,
                                       sectionIndex,
@@ -1611,235 +1901,288 @@ doc.setTextColor(0, 0, 0);
                                       imageIndex
                                     })}
                                   />
-                                  {editMode && inspection.status !== 'completed' && (
-                                    <button 
-                                      className="thumbnail-delete" 
+                                  
+                                  {editMode && (
+                                    <button
                                       onClick={() => handleDeleteImage(sectionIndex, itemIndex, imageIndex)}
+                                      style={{
+                                        position: 'absolute',
+                                        top: '8px',
+                                        right: '8px',
+                                        width: windowWidth <= 480 ? '28px' : '32px',
+                                        height: windowWidth <= 480 ? '28px' : '32px',
+                                        background: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '50%',
+                                        fontSize: windowWidth <= 480 ? '16px' : '18px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                                        transition: 'all 0.2s ease'
+                                      }}
                                       title="Ta bort bild"
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#dc2626';
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = '#ef4444';
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                      }}
                                     >
-                                      &times;
+                                      ×
                                     </button>
                                   )}
+                                  
+                                  <div style={{
+                                    position: 'absolute',
+                                    bottom: '0',
+                                    left: '0',
+                                    right: '0',
+                                    background: 'linear-gradient(transparent, rgba(0, 0, 0, 0.8))',
+                                    color: 'white',
+                                    padding: windowWidth <= 480 ? '8px 6px 6px' : '12px 8px 8px',
+                                    fontSize: windowWidth <= 480 ? '10px' : '12px',
+                                    fontWeight: '500',
+                                    textAlign: 'center'
+                                  }}>
+                                    {image.name.length > (windowWidth <= 480 ? 15 : 20) ? 
+                                      `${image.name.substring(0, windowWidth <= 480 ? 12 : 17)}...` : 
+                                      image.name
+                                    }
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           )}
-                          
-                {/* Simple Image Upload */}
-                {item.allowImages && editMode && inspection.status !== 'completed' && (
-                  <div className="image-upload-section">
-                    <h5>Lägg till bild</h5>
-                    <SimpleImageUploader 
-                      inspectionId={inspectionId}
-                      sectionIndex={sectionIndex}
-                      itemIndex={itemIndex}
-                      onImageUploaded={handleSimpleImageUpload}
-                    />
-                  </div>
-                )}
-                </div>
-                )}
-                </div>
-                  ) : (
-                    <div className="text-item">
-                      {editingQuestions ? (
-                        <div className="edit-label">
-                          <input
-                            type="text"
-                            value={item.label}
-                            onChange={(e) => handleEditItem(sectionIndex, itemIndex, e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeItem(sectionIndex, itemIndex)}
-                            className="button danger small"
-                          >
-                            Ta bort
-                          </button>
-                        </div>
-                      ) : (
-                        <label>
-                          {item.label}
-                          {item.required && <span className="required">*</span>}
-                        </label>
-                      )}
-                      
-                      {editMode ? (
-                        <input 
-                          type="text" 
-                          value={item.value || ''}
-                          onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'value', e.target.value)}
-                          disabled={inspection.status === 'completed'}
-                          required={item.required}
-                        />
-                      ) : (
-                        <p className="text-value">{item.value || '-'}</p>
-                      )}
-                      
-                      {/* Anteckningsfält */}
-                      {(item.notes || editMode) && (
-                        <div className="notes-field">
-                          {editMode ? (
-                            <textarea
-                              placeholder="Anteckningar"
-                              value={item.notes || ''}
-                              onChange={(e) => handleItemChange(sectionIndex, itemIndex, 'notes', e.target.value)}
-                              rows="2"
-                              disabled={inspection.status === 'completed'}
-                            />
-                          ) : (
-                            item.notes && <p className="notes">{item.notes}</p>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Direct Image Handling */}
-                      {item.allowImages && (
-                        <div className="item-images">
-                          {/* Visa uppladdade bilder */}
-                          {Array.isArray(item.images) && item.images.length > 0 && (
-                            <div className="image-gallery">
-                              <p style={{ fontSize: '12px', color: '#666', margin: '0 0 5px 0' }}>
-                                Bilder för sektion {sectionIndex}, fråga {itemIndex}
-                              </p>
-                              {item.images.map((image, imageIndex) => (
-                                <div key={image.uniqueId || imageIndex} className="thumbnail-container">
-                                  <img 
-                                    src={image.url} 
-                                    alt={`Bild ${imageIndex + 1}`} 
-                                    className="image-thumbnail" 
-                                    onClick={() => setActiveImageModal({
-                                      image,
-                                      sectionIndex,
-                                      itemIndex,
-                                      imageIndex
-                                    })}
-                                  />
-                                  {editMode && inspection.status !== 'completed' && (
-                                    <button 
-                                      className="thumbnail-delete" 
-                                      onClick={() => handleDeleteImage(sectionIndex, itemIndex, imageIndex)}
-                                      title="Ta bort bild"
-                                    >
-                                      &times;
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
+
+                          {/* No images message */}
+                          {(!item.images || item.images.length === 0) && !editMode && (
+                            <div style={{
+                              textAlign: 'center',
+                              padding: windowWidth <= 480 ? '20px' : '24px',
+                              color: '#9ca3af',
+                              fontSize: windowWidth <= 480 ? '13px' : '14px',
+                              fontStyle: 'italic'
+                            }}>
+                              Inga bilder tillagda
                             </div>
                           )}
-                          
-            {/* Simple Image Upload */}
-            {item.allowImages && editMode && inspection.status !== 'completed' && (
-              <div className="image-upload-section">
-                <h5>Lägg till bild</h5>
-                <SimpleImageUploader 
-                  inspectionId={inspectionId}
-                  sectionIndex={sectionIndex}
-                  itemIndex={itemIndex}
-                  onImageUploaded={handleSimpleImageUpload}
-                />
-              </div>
-            )}
-            </div>
-            )}
-            </div>
-
-                  )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-
-              {editingQuestions && (
-                <div className="add-new-item">
-                  {activeSectionForNewItem === sectionIndex ? (
-                    <div className="new-item-form">
-                      <div className="form-group">
-                        <label htmlFor={`new-item-label-${sectionIndex}`}>Frågetext:</label>
-                        <input
-                          type="text"
-                          id={`new-item-label-${sectionIndex}`}
-                          value={newItemLabel}
-                          onChange={(e) => setNewItemLabel(e.target.value)}
-                          placeholder="Ange frågetext"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor={`new-item-type-${sectionIndex}`}>Typ:</label>
-                        <select
-                          id={`new-item-type-${sectionIndex}`}
-                          value={newItemType}
-                          onChange={(e) => setNewItemType(e.target.value)}
-                        >
-                          <option value="yesno">Ja/Nej-fråga</option>
-                          <option value="checkbox">Kryssruta</option>
-                          <option value="text">Textfält</option>
-                          <option value="header">Rubrik</option>
-                        </select>
-                      </div>
-                      <div className="new-item-actions">
-                        <button
-                          type="button"
-                          onClick={() => setActiveSectionForNewItem(null)}
-                          className="button secondary"
-                        >
-                          Avbryt
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => addNewItem(sectionIndex)}
-                          className="button primary"
-                        >
-                          Lägg till
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setActiveSectionForNewItem(sectionIndex)}
-                      className="button secondary"
-                    >
-                      + Lägg till ny fråga
-                    </button>
-                  )}
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: windowWidth <= 480 ? '30px' : '40px',
+                  color: '#6b7280',
+                  fontSize: windowWidth <= 480 ? '14px' : '16px'
+                }}>
+                  {editMode ? 'Inga frågor finns än. Klicka på "Lägg till fråga" för att börja.' : 'Inga frågor finns i denna sektion'}
                 </div>
               )}
             </div>
+          ))}
+          
+          {/* Lägg till ny sektion knapp */}
+          {editMode && (
+            <div style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: windowWidth <= 480 ? '20px' : '32px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              border: '2px dashed #d1d5db',
+              textAlign: 'center'
+            }}>
+              {showAddSectionForm ? (
+                <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+                  <h3 style={{ 
+                    margin: '0 0 16px 0', 
+                    color: '#374151',
+                    fontSize: windowWidth <= 480 ? '18px' : '20px'
+                  }}>
+                    Lägg till ny sektion
+                  </h3>
+                  
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: windowWidth <= 480 ? '10px' : '12px' 
+                  }}>
+                    <input
+                      type="text"
+                      value={newSectionName}
+                      onChange={(e) => setNewSectionName(e.target.value)}
+                      placeholder="Ange sektionsnamn..."
+                      style={{
+                        width: '100%',
+                        padding: windowWidth <= 480 ? '12px' : '12px',
+                        border: '2px solid #3b82f6',
+                        borderRadius: '8px',
+                        fontSize: windowWidth <= 480 ? '16px' : '16px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        minHeight: '44px'
+                      }}
+                      autoFocus
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          addNewSection();
+                        }
+                      }}
+                    />
+                    
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: windowWidth <= 480 ? '6px' : '8px',
+                      justifyContent: 'center',
+                      flexDirection: windowWidth <= 360 ? 'column-reverse' : 'row'
+                    }}>
+                      <button
+                        onClick={() => {
+                          setShowAddSectionForm(false);
+                          setNewSectionName('');
+                        }}
+                        style={{
+                          padding: windowWidth <= 480 ? '12px 16px' : '10px 20px',
+                          background: '#6b7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: windowWidth <= 480 ? '13px' : '14px',
+                          cursor: 'pointer',
+                          width: windowWidth <= 360 ? '100%' : 'auto',
+                          minHeight: '44px'
+                        }}
+                      >
+                        Avbryt
+                      </button>
+                      <button
+                        onClick={addNewSection}
+                        disabled={!newSectionName.trim()}
+                        style={{
+                          padding: windowWidth <= 480 ? '12px 16px' : '10px 20px',
+                          background: newSectionName.trim() ? '#10b981' : '#9ca3af',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: windowWidth <= 480 ? '13px' : '14px',
+                          cursor: newSectionName.trim() ? 'pointer' : 'not-allowed',
+                          width: windowWidth <= 360 ? '100%' : 'auto',
+                          minHeight: '44px'
+                        }}
+                      >
+                        Skapa sektion
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddSectionForm(true)}
+                  style={{
+                    padding: windowWidth <= 480 ? '14px 20px' : '16px 32px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: windowWidth <= 480 ? '14px' : '16px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    margin: '0 auto',
+                    minHeight: '44px'
+                  }}
+                >
+                  <span style={{ fontSize: windowWidth <= 480 ? '16px' : '20px' }}>+</span>
+                  {windowWidth <= 480 ? 'Ny sektion' : 'Lägg till ny sektion'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        // Tom sektion vy
+        <div style={{
+          background: 'white',
+          borderRadius: '16px',
+          padding: windowWidth <= 480 ? '32px 20px' : '48px',
+          textAlign: 'center',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e2e8f0',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            background: '#f3f4f6',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px'
+          }}>
+            <span style={{ fontSize: '24px', color: '#9ca3af' }}>📋</span>
           </div>
-        ))}
-      </div>
+          <h3 style={{
+            fontSize: windowWidth <= 480 ? '18px' : '20px',
+            fontWeight: '600',
+            color: '#111827',
+            marginBottom: '8px'
+          }}>
+            Inga sektioner hittades
+          </h3>
+          <p style={{ 
+            color: '#6b7280', 
+            fontSize: windowWidth <= 480 ? '14px' : '16px', 
+            marginBottom: '24px',
+            lineHeight: '1.5'
+          }}>
+            {editMode ? 'Börja genom att skapa en ny sektion med frågor.' : 'Denna kontroll innehåller inga sektioner än.'}
+          </p>
+          
+          {editMode && (
+            <button
+              onClick={() => setShowAddSectionForm(true)}
+              style={{
+                padding: windowWidth <= 480 ? '12px 20px' : '12px 24px',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: windowWidth <= 480 ? '14px' : '16px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                minHeight: '44px'
+              }}
+            >
+              Skapa första sektionen
+            </button>
+          )}
+        </div>
+      )}
 
-      <div className="inspection-actions">
-        <Link 
-          to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}`}
-          className="button secondary"
-        >
-          Tillbaka till anläggning
-        </Link>
-        
-        {inspection.status === 'completed' && (
-          <button 
-            className="button primary"
-            onClick={handleGeneratePDF}
-            disabled={generatingPdf}
-          >
-            {generatingPdf ? 'Genererar PDF...' : 'Generera PDF-rapport'}
-          </button>
-        )}
-      </div>
-
-      {/* Bildmodal */}
+      {/* Image Modal */}
       {activeImageModal && (
-        <ImageModal 
+        <ImageModal
           image={activeImageModal.image}
           onClose={() => setActiveImageModal(null)}
-          onDelete={editMode && inspection.status !== 'completed' ? 
-            () => handleDeleteImage(
-              activeImageModal.sectionIndex, 
-              activeImageModal.itemIndex, 
+          onDelete={editMode ? () => {
+            handleDeleteImage(
+              activeImageModal.sectionIndex,
+              activeImageModal.itemIndex,
               activeImageModal.imageIndex
-            ) : null
-          }
+            );
+          } : null}
         />
       )}
     </div>

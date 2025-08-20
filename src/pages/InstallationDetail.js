@@ -1,4 +1,4 @@
-// src/pages/InstallationDetail.js - Snygg design utan debug
+// src/pages/InstallationDetail.js - Förbättrad med Dashboard-stil
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
@@ -18,6 +18,16 @@ const InstallationDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updating, setUpdating] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -36,17 +46,9 @@ const InstallationDetail = () => {
           return;
         }
         
-        const installationData = installationDoc.data();
-        
-        // Relaxad behörighetskontroll för migration
-        if (installationData.userId && installationData.userId !== currentUser.uid) {
-          // Tillåt åtkomst under migration
-        }
-        
-        setInstallation({
-          id: installationDoc.id,
-          ...installationData
-        });
+        const installationData = { id: installationDoc.id, ...installationDoc.data() };
+        setInstallation(installationData);
+        setEditedName(installationData.name || '');
 
         // Hämta kund- och adressinformation
         const [customerDoc, addressDoc] = await Promise.all([
@@ -62,84 +64,57 @@ const InstallationDetail = () => {
           setAddress({ id: addressDoc.id, ...addressDoc.data() });
         }
 
-        // Hämta kontroller - använd relaxad filtrering
-        const inspectionsWithUserQuery = query(
-          collection(db, 'inspections'),
-          where('installationId', '==', installationId),
-          where('userId', '==', currentUser.uid)
-        );
-        
-        const allInspectionsQuery = query(
+        // Hämta kontroller för denna anläggning
+        const inspectionsQuery = query(
           collection(db, 'inspections'),
           where('installationId', '==', installationId)
         );
         
-        const [inspectionsWithUserSnapshot, allInspectionsSnapshot] = await Promise.all([
-          getDocs(inspectionsWithUserQuery),
-          getDocs(allInspectionsQuery)
-        ]);
-        
-        const allInspections = allInspectionsSnapshot.docs.map(doc => ({
+        const inspectionsSnapshot = await getDocs(inspectionsQuery);
+        const inspectionsData = inspectionsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
         
-        // Filtrera kontroller som antingen saknar userId eller tillhör användaren
-        const filteredInspections = allInspections.filter(inspection => {
-          if (inspection.userId && inspection.userId !== currentUser.uid) {
-            return false;
-          }
-          return true;
-        });
-        
-        // Sortera med senaste först
-        filteredInspections.sort((a, b) => {
-          const aTime = a.createdAt?.seconds || 0;
-          const bTime = b.createdAt?.seconds || 0;
-          return bTime - aTime;
-        });
-        
-        setInspections(filteredInspections);
+        setInspections(inspectionsData);
       } catch (err) {
-        console.error('Error fetching installation data:', err);
-        setError('Kunde inte hämta anläggningsinformation');
+        console.error('Error fetching data:', err);
+        setError('Kunde inte ladda anläggningsinformation');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [installationId, customerId, addressId, currentUser]);
+  }, [customerId, addressId, installationId, currentUser]);
 
-  const toggleStatus = async () => {
-    if (updating) return;
+  const handleNameEdit = async () => {
+    if (!editedName.trim()) return;
     
-    setUpdating(true);
     try {
-      const newStatus = installation.status === 'completed' ? 'pending' : 'completed';
-      
-      await updateDoc(doc(db, 'installations', installationId), {
-        status: newStatus,
+      setUpdating(true);
+      const installationRef = doc(db, 'installations', installationId);
+      await updateDoc(installationRef, {
+        name: editedName.trim(),
         updatedAt: serverTimestamp()
       });
       
-      setInstallation(prev => ({
-        ...prev,
-        status: newStatus,
-        updatedAt: new Date()
-      }));
+      setInstallation({ ...installation, name: editedName.trim() });
+      setEditingName(false);
     } catch (err) {
-      console.error('Error updating status:', err);
-      setError('Kunde inte uppdatera status');
+      console.error('Error updating installation name:', err);
+      alert('Kunde inte uppdatera anläggningsnamn');
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     confirmation.confirm({
       title: 'Ta bort anläggning',
-      message: 'Är du säker på att du vill ta bort denna anläggning? Detta kommer ta bort alla tillhörande kontroller.',
+      message: `Är du säker på att du vill ta bort "${installation?.name}"? Detta kommer att ta bort alla tillhörande kontroller.`,
+      confirmText: 'Ta bort',
+      cancelText: 'Avbryt',
       onConfirm: async () => {
         setUpdating(true);
         
@@ -162,725 +137,528 @@ const InstallationDetail = () => {
     });
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp?.seconds) return 'Okänt datum';
-    return new Date(timestamp.seconds * 1000).toLocaleDateString('sv-SE', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed': return 'success';
-      case 'in-progress': return 'warning';
-      default: return 'pending';
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'completed': return 'Slutförd';
-      case 'in-progress': return 'Pågående';
-      default: return 'Utkast';
-    }
-  };
-
   if (loading) {
     return (
-      <div className="page-container">
-        <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Laddar anläggning...</p>
-        </div>
+      <div style={{ 
+        maxWidth: '1200px', 
+        margin: '0 auto', 
+        padding: windowWidth > 1024 ? '0 24px' : '0 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '400px'
+      }}>
+        <div className="loading-spinner" style={{
+          width: '40px',
+          height: '40px',
+          border: '4px solid #e5e7eb',
+          borderTop: '4px solid #0066cc',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <span style={{ 
+          marginLeft: '16px', 
+          color: '#6b7280',
+          fontSize: '16px'
+        }}>
+          Laddar anläggning...
+        </span>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !installation) {
     return (
-      <div className="page-container">
-        <div className="error-state">
-          <div className="error-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="15" y1="9" x2="9" y2="15"/>
-              <line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
-          </div>
-          <h3>Ett fel uppstod</h3>
-          <p>{error}</p>
-          <button onClick={() => navigate(-1)} className="button secondary">
+      <div style={{ 
+        maxWidth: '1200px', 
+        margin: '0 auto', 
+        padding: windowWidth > 1024 ? '0 24px' : '0 16px'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          padding: '48px',
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          margin: '32px 0'
+        }}>
+          <h3 style={{ 
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#dc2626',
+            marginBottom: '8px'
+          }}>
+            {error || 'Anläggningen hittades inte'}
+          </h3>
+          <p style={{ color: '#6b7280', fontSize: '16px', marginBottom: '24px' }}>
+            {error || 'Den anläggning du söker efter finns inte eller har tagits bort.'}
+          </p>
+          <Link 
+            to={`/customers/${customerId}/addresses/${addressId}`}
+            style={{
+              textDecoration: 'none',
+              padding: '12px 24px',
+              background: '#f3f4f6',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#0066cc',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H6m0 0l6 6m-6-6l6-6"/>
             </svg>
             Gå tillbaka
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!installation) {
-    return (
-      <div className="page-container">
-        <div className="error-state">
-          <h3>Anläggningen hittades inte</h3>
-          <p>Den anläggning du söker efter finns inte eller har tagits bort.</p>
-          <button onClick={() => navigate(-1)} className="button secondary">
-            Gå tillbaka
-          </button>
+          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page-container">
-      {/* Page Header */}
-      <div className="page-header">
-        <div className="header-content">
-          <div className="header-main">
-            <h1>{installation.name}</h1>
-            <div className="header-badges">
-              <span className={`status-badge ${installation.status === 'completed' ? 'completed' : 'pending'}`}>
-                {installation.status === 'completed' ? 'Klarmarkerad' : 'Ej klar'}
-              </span>
-              <span className="type-badge">{installation.type || 'Anläggning'}</span>
-            </div>
-          </div>
-          <div className="breadcrumb">
-            <Link to="/customers">Kunder</Link>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="9,18 15,12 9,6"/>
-            </svg>
-            <Link to={`/customers/${customerId}`}>{customer?.name || 'Kund'}</Link>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="9,18 15,12 9,6"/>
-            </svg>
-            <Link to={`/customers/${customerId}/addresses/${addressId}`}>{address?.street || 'Adress'}</Link>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="9,18 15,12 9,6"/>
-            </svg>
-            <span>{installation.name}</span>
-          </div>
-        </div>
+    <div style={{ 
+      maxWidth: '1200px', 
+      margin: '0 auto', 
+      padding: windowWidth > 1024 ? '0 24px' : '0 16px' 
+    }}>
+      {/* Back Button */}
+      <div style={{ marginBottom: '24px' }}>
+        <Link 
+          to={`/customers/${customerId}/addresses/${addressId}`}
+          style={{ 
+            textDecoration: 'none',
+            padding: '8px 16px',
+            background: '#f3f4f6',
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb',
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#0066cc',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#e5e7eb';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#f3f4f6';
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H6m0 0l6 6m-6-6l6-6"/>
+          </svg>
+          Tillbaka till {address?.street || 'adress'}
+        </Link>
+      </div>
 
-        <div className="header-actions">
-          <button
-            onClick={toggleStatus}
-            className={`button ${installation.status === 'completed' ? 'secondary' : 'success'}`}
-            disabled={updating}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {installation.status === 'completed' ? (
-                <path d="M9 11H4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h5l2-3 2 3h5a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h-5l-2 3-2-3z"/>
+      {/* Breadcrumb */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        fontSize: '14px',
+        color: '#6b7280',
+        marginBottom: '24px',
+        flexWrap: 'wrap'
+      }}>
+        <Link 
+          to="/customers"
+          style={{ color: '#0066cc', textDecoration: 'none' }}
+        >
+          Kunder
+        </Link>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        <Link 
+          to={`/customers/${customerId}`}
+          style={{ color: '#0066cc', textDecoration: 'none' }}
+        >
+          {customer?.name}
+        </Link>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        <Link 
+          to={`/customers/${customerId}/addresses/${addressId}`}
+          style={{ color: '#0066cc', textDecoration: 'none' }}
+        >
+          {address?.street || address?.name}
+        </Link>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        <span>{installation?.name}</span>
+      </div>
+
+      {/* Header med anläggningsnamn och edit-funktion */}
+      <div style={{ marginBottom: windowWidth > 1024 ? '48px' : '32px' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: windowWidth > 768 ? 'center' : 'flex-start',
+          flexDirection: windowWidth > 768 ? 'row' : 'column',
+          gap: windowWidth > 768 ? '0' : '24px',
+          marginBottom: '16px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {editingName ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <input
+                  type="text"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  style={{
+                    fontSize: windowWidth > 1024 ? '32px' : windowWidth > 768 ? '28px' : '24px',
+                    fontWeight: 'bold',
+                    color: '#0066cc',
+                    background: 'white',
+                    border: '2px solid #0066cc',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    outline: 'none'
+                  }}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') handleNameEdit();
+                    if (e.key === 'Escape') {
+                      setEditingName(false);
+                      setEditedName(installation.name || '');
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleNameEdit}
+                  disabled={updating}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#0066cc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Spara
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingName(false);
+                    setEditedName(installation.name || '');
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#f3f4f6',
+                    color: '#6b7280',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Avbryt
+                </button>
+              </div>
+            ) : (
+              <>
+                <h1 style={{ 
+                  fontSize: windowWidth > 1024 ? '32px' : windowWidth > 768 ? '28px' : '24px',
+                  fontWeight: 'bold',
+                  color: '#0066cc',
+                  margin: 0
+                }}>
+                  {installation?.name}
+                </h1>
+                <button
+                  onClick={() => setEditingName(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f3f4f6';
+                    e.currentTarget.style.color = '#0066cc';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'none';
+                    e.currentTarget.style.color = '#6b7280';
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
+          
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Link 
+              to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/inspections/new`}
+              style={{
+                textDecoration: 'none',
+                padding: '12px 24px',
+                background: '#0066cc',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: 'white',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#0052a3';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#0066cc';
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Ny kontroll
+            </Link>
+            
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDelete();
+              }}
+              disabled={updating}
+              style={{
+                padding: '12px 16px',
+                background: '#fef2f2',
+                color: '#dc2626',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: updating ? 'not-allowed' : 'pointer',
+                opacity: updating ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                if (!updating) {
+                  e.currentTarget.style.background = '#fee2e2';
+                  e.currentTarget.style.borderColor = '#fca5a5';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!updating) {
+                  e.currentTarget.style.background = '#fef2f2';
+                  e.currentTarget.style.borderColor = '#fecaca';
+                }
+              }}
+            >
+              {updating ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid #fca5a5',
+                    borderTop: '2px solid #dc2626',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }}></div>
+                  Tar bort...
+                </div>
               ) : (
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3,6 5,6 21,6"/>
+                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+                  </svg>
+                  Ta bort anläggning
+                </div>
               )}
-              {installation.status !== 'completed' && <polyline points="22,4 12,14.01 9,11.01"/>}
-            </svg>
-            {updating ? 'Uppdaterar...' : (installation.status === 'completed' ? 'Markera som ej klar' : 'Klarmarkera')}
-          </button>
-          <Link
-            to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/edit`}
-            className="button secondary"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            Redigera
-          </Link>
-          <button
-            onClick={handleDelete}
-            className="button danger"
-            disabled={updating}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3,6 5,6 21,6"/>
-              <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
-            </svg>
-            Ta bort
-          </button>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="page-content">
-        <div className="content-grid">
-          {/* Installation Info Card */}
-          <div className="info-card">
-            <div className="card-header">
-              <div className="card-header-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="4" width="20" height="16" rx="2"/>
-                  <path d="M7 15h10M7 11h4"/>
-                </svg>
-              </div>
-              <div>
-                <h3>Anläggningsinformation</h3>
-                <p>Detaljer och specifikationer</p>
-              </div>
-            </div>
-
-            <div className="card-content">
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">Typ</span>
-                  <span className="info-value">{installation.type || 'Ej angiven'}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Status</span>
-                  <span className={`info-badge ${installation.status === 'completed' ? 'success' : 'pending'}`}>
-                    {installation.status === 'completed' ? 'Klarmarkerad' : 'Ej klar'}
-                  </span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Kund</span>
-                  <span className="info-value">{customer?.name || 'Okänd'}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Adress</span>
-                  <span className="info-value">
-                    {address ? `${address.street}, ${address.postalCode} ${address.city}` : 'Okänd'}
-                  </span>
-                </div>
-                {installation.description && (
-                  <div className="info-item full-width">
-                    <span className="info-label">Beskrivning</span>
-                    <span className="info-value">{installation.description}</span>
-                  </div>
-                )}
-                {installation.serialNumber && (
-                  <div className="info-item">
-                    <span className="info-label">Serienummer</span>
-                    <span className="info-value">{installation.serialNumber}</span>
-                  </div>
-                )}
-                {installation.manufacturer && (
-                  <div className="info-item">
-                    <span className="info-label">Tillverkare</span>
-                    <span className="info-value">{installation.manufacturer}</span>
-                  </div>
-                )}
-                {installation.model && (
-                  <div className="info-item">
-                    <span className="info-label">Modell</span>
-                    <span className="info-value">{installation.model}</span>
-                  </div>
-                )}
-                {installation.installationDate && (
-                  <div className="info-item">
-                    <span className="info-label">Installationsdatum</span>
-                    <span className="info-value">{installation.installationDate}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Kontroller - Samma stil som anläggningskort */}
+      {inspections.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '64px 32px',
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            background: '#f3f4f6',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px'
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.5">
+              <path d="M9 12l2 2 4-4"/>
+              <path d="M21 12c.552 0 1-.448 1-1V8a2 2 0 0 0-2-2h-1V4a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v3c0 .552.448 1 1 1h1v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2h1z"/>
+            </svg>
           </div>
-
-          {/* Inspections Card */}
-          <div className="inspections-card">
-            <div className="card-header">
-              <div className="card-header-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14,2 14,8 20,8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                  <polyline points="10,9 9,9 8,9"/>
-                </svg>
-              </div>
-              <div>
-                <h3>Kontroller</h3>
-                <p>{inspections.length} {inspections.length === 1 ? 'kontroll' : 'kontroller'} registrerade</p>
-              </div>
-              <Link 
-                to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/inspections/new`}
-                className="button primary"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Skapa ny kontroll
-              </Link>
-            </div>
-
-            <div className="card-content">
-              {inspections.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14,2 14,8 20,8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                      <polyline points="10,9 9,9 8,9"/>
-                    </svg>
-                  </div>
-                  <h4>Inga kontroller än</h4>
-                  <p>Skapa en ny kontroll för att komma igång med dokumentationen.</p>
-                  <Link 
-                    to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/inspections/new`}
-                    className="button primary"
-                  >
-                    Skapa första kontrollen
-                  </Link>
-                </div>
-              ) : (
-                <div className="inspections-list">
-                  {inspections.map(inspection => (
-                    <div key={inspection.id} className="inspection-card">
-                      <Link to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/inspections/${inspection.id}`}>
-                        <div className="inspection-content">
-                          <div className="inspection-header">
-                            <h4>{inspection.name || 'Namnlös kontroll'}</h4>
-                            <span className={`status-badge ${getStatusColor(inspection.status)}`}>
-                              {getStatusText(inspection.status)}
-                            </span>
-                          </div>
-                          <div className="inspection-meta">
-                            <div className="meta-item">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                                <line x1="16" y1="2" x2="16" y2="6"/>
-                                <line x1="8" y1="2" x2="8" y2="6"/>
-                                <line x1="3" y1="10" x2="21" y2="10"/>
-                              </svg>
-                              <span>Skapad: {formatDate(inspection.createdAt)}</span>
-                            </div>
-                            {inspection.completedAt && (
-                              <div className="meta-item">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                  <polyline points="22,4 12,14.01 9,11.01"/>
-                                </svg>
-                                <span>Slutförd: {formatDate(inspection.completedAt)}</span>
-                              </div>
-                            )}
-                            {inspection.sections && inspection.sections.length > 0 && (
-                              <div className="meta-item">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                  <polyline points="14,2 14,8 20,8"/>
-                                </svg>
-                                <span>{inspection.sections.length} {inspection.sections.length === 1 ? 'sektion' : 'sektioner'}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="inspection-arrow">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="9,18 15,12 9,6"/>
-                          </svg>
-                        </div>
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <div className="navigation-section">
+          
+          <h3 style={{ 
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#0066cc',
+            marginBottom: '8px',
+            margin: 0,
+            paddingBottom: '8px'
+          }}>
+            Inga kontroller än
+          </h3>
+          <p style={{ 
+            color: '#6b7280',
+            marginBottom: '32px',
+            fontSize: '16px',
+            margin: 0,
+            paddingBottom: '32px'
+          }}>
+            Skapa den första kontrollen för denna anläggning för att komma igång.
+          </p>
           <Link 
-            to={`/customers/${customerId}/addresses/${addressId}`} 
-            className="button secondary"
+            to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/inspections/new`}
+            style={{
+              textDecoration: 'none',
+              padding: '12px 24px',
+              background: '#0066cc',
+              borderRadius: '8px',
+              border: 'none',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: 'white',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H6m0 0l6 6m-6-6l6-6"/>
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Tillbaka till adress
+            Skapa första kontrollen
           </Link>
         </div>
-      </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(auto-fill, minmax(${windowWidth > 768 ? '320px' : '280px'}, 1fr))`,
+          gap: '24px'
+        }}>
+          {inspections.map(inspection => (
+            <Link 
+              key={inspection.id} 
+              to={`/customers/${customerId}/addresses/${addressId}/installations/${installationId}/inspections/${inspection.id}`}
+              style={{
+                textDecoration: 'none',
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: '12px',
+                padding: '24px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                display: 'block'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#0066cc';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 102, 204, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#e5e7eb';
+                e.currentTarget.style.transform = 'translateY(0px)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+              }}
+            >
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'flex-start',
+                marginBottom: '16px'
+              }}>
+                <h3 style={{
+                  color: '#0066cc',
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  lineHeight: '1.3'
+                }}>
+                  {inspection.name || inspection.templateName || 'Kontroll'}
+                </h3>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
+                  <polyline points="9,18 15,12 9,6"/>
+                </svg>
+              </div>
+              
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: '#6b7280',
+                fontSize: '14px',
+                marginBottom: '8px'
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span>
+                  {inspection.createdAt && new Date(inspection.createdAt.seconds * 1000).toLocaleDateString('sv-SE')}
+                </span>
+              </div>
+              
+              {inspection.status && (
+                <div style={{
+                  display: 'inline-block',
+                  padding: '4px 8px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  background: inspection.status === 'completed' ? '#f0f9f0' : '#fef9e7',
+                  color: inspection.status === 'completed' ? '#0d5016' : '#8b5a00'
+                }}>
+                  {inspection.status === 'completed' ? 'Slutförd' : 'Pågående'}
+                </div>
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
 
-      <style jsx>{`
-        .page-header {
-          margin-bottom: var(--space-2xl);
-        }
-
-        .header-main {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-md);
-          margin-bottom: var(--space-lg);
-        }
-
-        .header-main h1 {
-          color: var(--white);
-          margin: 0;
-          font-size: 2.5rem;
-          font-weight: 700;
-        }
-
-        .header-badges {
-          display: flex;
-          gap: var(--space-md);
-          align-items: center;
-        }
-
-        .status-badge {
-          padding: var(--space-xs) var(--space-md);
-          border-radius: var(--radius);
-          font-size: 0.875rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .status-badge.completed {
-          background: var(--green-light);
-          color: var(--green);
-          border: 1px solid var(--green);
-        }
-
-        .status-badge.pending {
-          background: var(--orange-light);
-          color: var(--orange);
-          border: 1px solid var(--orange);
-        }
-
-        .type-badge {
-          background: var(--dark-600);
-          color: var(--dark-200);
-          padding: var(--space-xs) var(--space-md);
-          border-radius: var(--radius);
-          font-size: 0.875rem;
-          font-weight: 500;
-          border: 1px solid var(--dark-500);
-        }
-
-        .breadcrumb {
-          display: flex;
-          align-items: center;
-          gap: var(--space-sm);
-          font-size: 0.9rem;
-          color: var(--dark-300);
-        }
-
-        .breadcrumb a {
-          color: var(--green);
-          text-decoration: none;
-          font-weight: 500;
-        }
-
-        .breadcrumb a:hover {
-          text-decoration: underline;
-        }
-
-        .header-actions {
-          display: flex;
-          gap: var(--space-md);
-          align-items: center;
-        }
-
-        .content-grid {
-          display: grid;
-          gap: var(--space-2xl);
-          margin-bottom: var(--space-2xl);
-        }
-
-        .info-card, .inspections-card {
-          background: var(--dark-800);
-          border: var(--border);
-          border-radius: var(--radius);
-          overflow: hidden;
-          position: relative;
-        }
-
-        .info-card::before, .inspections-card::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 3px;
-          background: linear-gradient(90deg, var(--green), transparent);
-        }
-
-        .card-header {
-          background: var(--dark-700);
-          padding: var(--space-xl);
-          display: flex;
-          align-items: center;
-          gap: var(--space-lg);
-          border-bottom: var(--border);
-        }
-
-        .card-header-icon {
-          background: rgba(0, 255, 0, 0.1);
-          color: var(--green);
-          padding: var(--space-md);
-          border-radius: var(--radius);
-          border: 1px solid var(--green);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .card-header h3 {
-          color: var(--white);
-          margin: 0;
-          font-size: 1.25rem;
-          font-weight: 600;
-        }
-
-        .card-header p {
-          color: var(--dark-200);
-          margin: 0;
-          font-size: 0.9rem;
-        }
-
-        .card-content {
-          padding: var(--space-xl);
-        }
-
-        .info-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: var(--space-lg);
-        }
-
-        .info-item {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-xs);
-        }
-
-        .info-item.full-width {
-          grid-column: 1 / -1;
-        }
-
-        .info-label {
-          color: var(--dark-300);
-          font-size: 0.875rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .info-value {
-          color: var(--white);
-          font-size: 1rem;
-          font-weight: 500;
-        }
-
-        .info-badge {
-          padding: var(--space-xs) var(--space-sm);
-          border-radius: var(--radius);
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          width: fit-content;
-        }
-
-        .info-badge.success {
-          background: var(--green-light);
-          color: var(--green);
-          border: 1px solid var(--green);
-        }
-
-        .info-badge.pending {
-          background: var(--orange-light);
-          color: var(--orange);
-          border: 1px solid var(--orange);
-        }
-
-        .empty-state {
-          text-align: center;
-          padding: var(--space-3xl);
-        }
-
-        .empty-icon {
-          color: var(--dark-400);
-          margin-bottom: var(--space-lg);
-        }
-
-        .empty-state h4 {
-          color: var(--white);
-          margin: 0 0 var(--space-md) 0;
-          font-size: 1.25rem;
-          font-weight: 600;
-        }
-
-        .empty-state p {
-          color: var(--dark-200);
-          margin: 0 0 var(--space-xl) 0;
-          font-size: 1rem;
-        }
-
-        .inspections-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-md);
-        }
-
-        .inspection-card {
-          background: var(--dark-700);
-          border: 1px solid var(--dark-500);
-          border-radius: var(--radius);
-          transition: all var(--transition);
-        }
-
-        .inspection-card:hover {
-          border-color: var(--green);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-        }
-
-        .inspection-card a {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: var(--space-lg);
-          text-decoration: none;
-          color: inherit;
-        }
-
-        .inspection-content {
-          flex: 1;
-        }
-
-        .inspection-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: var(--space-md);
-        }
-
-        .inspection-header h4 {
-          color: var(--white);
-          margin: 0;
-          font-size: 1.1rem;
-          font-weight: 600;
-        }
-
-        .status-badge.success {
-          background: var(--green-light);
-          color: var(--green);
-          border: 1px solid var(--green);
-        }
-
-        .status-badge.warning {
-          background: var(--orange-light);
-          color: var(--orange);
-          border: 1px solid var(--orange);
-        }
-
-        .status-badge.pending {
-          background: var(--dark-600);
-          color: var(--dark-200);
-          border: 1px solid var(--dark-500);
-        }
-
-        .inspection-meta {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--space-lg);
-        }
-
-        .meta-item {
-          display: flex;
-          align-items: center;
-          gap: var(--space-xs);
-          color: var(--dark-200);
-          font-size: 0.875rem;
-        }
-
-        .inspection-arrow {
-          color: var(--dark-400);
-          transition: all var(--transition);
-        }
-
-        .inspection-card:hover .inspection-arrow {
-          color: var(--green);
-          transform: translateX(4px);
-        }
-
-        .navigation-section {
-          padding-top: var(--space-xl);
-          border-top: var(--border);
-        }
-
-        .error-state {
-          text-align: center;
-          padding: var(--space-2xl);
-          background: var(--dark-800);
-          border: var(--border);
-          border-radius: var(--radius);
-          margin: var(--space-2xl) auto;
-          max-width: 500px;
-        }
-
-        .error-icon {
-          color: var(--red);
-          margin-bottom: var(--space-lg);
-        }
-
-        .error-state h3 {
-          color: var(--white);
-          margin: 0 0 var(--space-md) 0;
-          font-size: 1.5rem;
-        }
-
-        .error-state p {
-          color: var(--dark-200);
-          margin: 0 0 var(--space-xl) 0;
-        }
-
-        @media (max-width: 768px) {
-          .header-main h1 {
-            font-size: 2rem;
-          }
-
-          .header-badges {
-            flex-wrap: wrap;
-          }
-
-          .breadcrumb {
-            flex-wrap: wrap;
-          }
-
-          .header-actions {
-            flex-direction: column;
-            gap: var(--space-sm);
-          }
-
-          .header-actions .button {
-            width: 100%;
-          }
-
-          .info-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .inspection-header {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: var(--space-sm);
-          }
-
-          .inspection-meta {
-            flex-direction: column;
-            gap: var(--space-sm);
-          }
-
-          .card-header {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: var(--space-md);
-          }
-
-          .card-header .button {
-            width: 100%;
-          }
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
       `}</style>
     </div>

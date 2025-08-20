@@ -1,17 +1,19 @@
-// src/pages/TemplateBuilder.js - Med användarspecifik mallskapande
+// src/pages/TemplateBuilder.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmation } from '../components/ConfirmationProvider';
 import { v4 as uuidv4 } from 'uuid';
 
 const TemplateBuilder = () => {
+  const { templateId } = useParams();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const { templateId } = useParams();
+  const confirmation = useConfirmation();
   const isEdit = Boolean(templateId);
-  
+
   const [templateData, setTemplateData] = useState({
     name: '',
     description: '',
@@ -19,38 +21,45 @@ const TemplateBuilder = () => {
   });
   
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(isEdit);
   const [error, setError] = useState('');
-  const [draggedItem, setDraggedItem] = useState(null);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // Responsive hantering
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (isEdit && templateId) {
-      const fetchTemplate = async () => {
-        try {
-          const templateDoc = await getDoc(doc(db, 'checklistTemplates', templateId));
-          if (templateDoc.exists()) {
-            const data = templateDoc.data();
-            // Kontrollera att mallen tillhör inloggad användare
-            if (data.userId !== currentUser.uid) {
-              setError('Du har inte behörighet att redigera denna mall');
-              return;
-            }
-            setTemplateData({
-              name: data.name || '',
-              description: data.description || '',
-              sections: data.sections || []
-            });
-          } else {
-            setError('Mallen hittades inte');
-          }
-        } catch (err) {
-          console.error('Error fetching template:', err);
-          setError('Kunde inte hämta mallinformation');
-        }
-      };
-      
       fetchTemplate();
     }
-  }, [isEdit, templateId, currentUser.uid]);
+  }, [isEdit, templateId]);
+
+  const fetchTemplate = async () => {
+    try {
+      setInitialLoading(true);
+      const templateDoc = await getDoc(doc(db, 'checklistTemplates', templateId));
+      
+      if (templateDoc.exists()) {
+        const data = templateDoc.data();
+        setTemplateData({
+          name: data.name || '',
+          description: data.description || '',
+          sections: data.sections || []
+        });
+      } else {
+        setError('Mall hittades inte');
+      }
+    } catch (err) {
+      console.error('Error fetching template:', err);
+      setError('Kunde inte ladda mall');
+    } finally {
+      setInitialLoading(false);
+    }
+  };
 
   const handleBasicInfoChange = (e) => {
     const { name, value } = e.target;
@@ -63,10 +72,11 @@ const TemplateBuilder = () => {
   const addSection = () => {
     const newSection = {
       id: uuidv4(),
-      title: 'Ny sektion',
+      name: `Sektion ${templateData.sections.length + 1}`,
+      description: '',
       items: []
     };
-    
+
     setTemplateData(prev => ({
       ...prev,
       sections: [...prev.sections, newSection]
@@ -82,31 +92,37 @@ const TemplateBuilder = () => {
     }));
   };
 
-  const deleteSection = (sectionId) => {
-    setTemplateData(prev => ({
-      ...prev,
-      sections: prev.sections.filter(section => section.id !== sectionId)
-    }));
+  const deleteSection = async (sectionId) => {
+    const section = templateData.sections.find(s => s.id === sectionId);
+    
+    confirmation.confirm({
+      title: 'Ta bort sektion',
+      message: `Är du säker på att du vill ta bort sektionen "${section?.name || 'Unnamed'}"? Alla kontrollpunkter i sektionen kommer också att tas bort.`,
+      confirmText: 'Ta bort',
+      confirmButtonClass: 'danger',
+      onConfirm: () => {
+        setTemplateData(prev => ({
+          ...prev,
+          sections: prev.sections.filter(section => section.id !== sectionId)
+        }));
+      }
+    });
   };
 
   const addItem = (sectionId, type = 'yesno') => {
     const newItem = {
       id: uuidv4(),
       type,
-      label: type === 'header' ? 'Rubrik' : 'Ny fråga',
-      required: true,
+      label: type === 'header' ? 'Ny rubrik' : 'Ny kontrollpunkt',
+      required: false,
       allowImages: false
     };
-
-    if (type === 'yesno') {
-      newItem.options = ['Ja', 'Nej'];
-    }
 
     setTemplateData(prev => ({
       ...prev,
       sections: prev.sections.map(section =>
         section.id === sectionId
-          ? { ...section, items: [...section.items, newItem] }
+          ? { ...section, items: [...(section.items || []), newItem] }
           : section
       )
     }));
@@ -128,188 +144,344 @@ const TemplateBuilder = () => {
     }));
   };
 
-  const deleteItem = (sectionId, itemId) => {
-    setTemplateData(prev => ({
-      ...prev,
-      sections: prev.sections.map(section =>
-        section.id === sectionId
-          ? { ...section, items: section.items.filter(item => item.id !== itemId) }
-          : section
-      )
-    }));
-  };
-
-  const moveItem = (fromSectionId, toSectionId, itemId, newIndex) => {
-    setTemplateData(prev => {
-      const newSections = [...prev.sections];
-      
-      // Hitta item som ska flyttas
-      const fromSection = newSections.find(s => s.id === fromSectionId);
-      const itemToMove = fromSection.items.find(i => i.id === itemId);
-      
-      // Ta bort från ursprunglig sektion
-      fromSection.items = fromSection.items.filter(i => i.id !== itemId);
-      
-      // Lägg till i ny sektion
-      const toSection = newSections.find(s => s.id === toSectionId);
-      toSection.items.splice(newIndex, 0, itemToMove);
-      
-      return { ...prev, sections: newSections };
+  const deleteItem = async (sectionId, itemId) => {
+    const section = templateData.sections.find(s => s.id === sectionId);
+    const item = section?.items?.find(i => i.id === itemId);
+    
+    confirmation.confirm({
+      title: 'Ta bort kontrollpunkt',
+      message: `Är du säker på att du vill ta bort kontrollpunkten "${item?.label || 'Unnamed'}"?`,
+      confirmText: 'Ta bort',
+      confirmButtonClass: 'danger',
+      onConfirm: () => {
+        setTemplateData(prev => ({
+          ...prev,
+          sections: prev.sections.map(section =>
+            section.id === sectionId
+              ? {
+                  ...section,
+                  items: section.items.filter(item => item.id !== itemId)
+                }
+              : section
+          )
+        }));
+      }
     });
   };
 
   const handleSave = async () => {
-    if (!currentUser) {
-      setError('Du måste vara inloggad för att skapa mallar');
-      return;
-    }
-
     if (!templateData.name.trim()) {
       setError('Mallnamn är obligatoriskt');
       return;
     }
 
-    if (templateData.sections.length === 0) {
-      setError('Mallen måste ha minst en sektion');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
     try {
-      const templateToSave = {
-        ...templateData,
-        userId: currentUser.uid,           // 👈 Koppla till användare
-        userEmail: currentUser.email,     // 👈 Spara email också
+      setLoading(true);
+      setError('');
+
+      const templatePayload = {
+        name: templateData.name.trim(),
+        description: templateData.description.trim(),
+        sections: templateData.sections,
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
         updatedAt: serverTimestamp()
       };
 
       if (isEdit) {
-        // Uppdatera befintlig mall
-        await updateDoc(doc(db, 'checklistTemplates', templateId), templateToSave);
-        console.log('✅ Template updated for user:', currentUser.email);
+        await updateDoc(doc(db, 'checklistTemplates', templateId), templatePayload);
       } else {
-        // Skapa ny mall
-        templateToSave.createdAt = serverTimestamp();
-        const docRef = await addDoc(collection(db, 'checklistTemplates'), templateToSave);
-        console.log('✅ New template created for user:', currentUser.email, 'ID:', docRef.id);
+        templatePayload.createdAt = serverTimestamp();
+        await addDoc(collection(db, 'checklistTemplates'), templatePayload);
       }
 
-      console.log('🚀 Navigating to /templates...');
       navigate('/templates');
     } catch (err) {
       console.error('Error saving template:', err);
-      setError('Kunde inte spara mall. Försök igen.');
+      setError('Kunde inte spara mallen. Försök igen.');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderItem = (sectionId, item, index) => {
+  const renderItemBuilder = (sectionId, item) => {
     return (
-      <div
-        key={item.id}
-        className="template-item"
-        draggable
-        onDragStart={(e) => {
-          setDraggedItem({ sectionId, itemId: item.id, index });
-          e.dataTransfer.effectAllowed = 'move';
-        }}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (draggedItem && draggedItem.itemId !== item.id) {
-            moveItem(draggedItem.sectionId, sectionId, draggedItem.itemId, index);
-          }
-          setDraggedItem(null);
+      <div 
+        key={item.id} 
+        style={{
+          background: '#fafafa',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '12px'
         }}
       >
-        <div className="item-header">
-          <div className="item-type-badge">
-            {item.type === 'yesno' && 'JA/NEJ'}
-            {item.type === 'checkbox' && 'KRYSSRUTA'}
-            {item.type === 'text' && 'TEXT'}
-            {item.type === 'header' && 'RUBRIK'}
-          </div>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '12px',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <select
+            value={item.type}
+            onChange={(e) => updateItem(sectionId, item.id, { type: e.target.value })}
+            disabled={loading}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              background: 'white',
+              fontSize: '14px',
+              minWidth: '140px'
+            }}
+          >
+            <option value="yesno">Ja/Nej fråga</option>
+            <option value="text">Textfält</option>
+            <option value="header">Rubrik</option>
+          </select>
+          
           <button
             onClick={() => deleteItem(sectionId, item.id)}
-            className="delete-item-btn"
-            title="Ta bort"
+            disabled={loading}
+            style={{
+              padding: '6px 8px',
+              background: '#fee2e2',
+              border: '1px solid #fecaca',
+              borderRadius: '6px',
+              color: '#dc2626',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#fecaca';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#fee2e2';
+              }
+            }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3,6 5,6 21,6"/>
-              <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
             </svg>
+            Ta bort
           </button>
         </div>
 
-        <div className="item-content">
-          <div className="form-group">
-            <label>Fråga/Rubrik</label>
-            <input
-              type="text"
-              value={item.label}
-              onChange={(e) => updateItem(sectionId, item.id, { label: e.target.value })}
-              placeholder={item.type === 'header' ? 'Rubriktext' : 'Skriv din fråga här'}
-            />
-          </div>
-
-          {item.type !== 'header' && (
-            <div className="item-options">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={item.required || false}
-                  onChange={(e) => updateItem(sectionId, item.id, { required: e.target.checked })}
-                />
-                <span>Obligatorisk</span>
-              </label>
-
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={item.allowImages || false}
-                  onChange={(e) => updateItem(sectionId, item.id, { allowImages: e.target.checked })}
-                />
-                <span>Tillåt bilder</span>
-              </label>
-            </div>
-          )}
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{
+            display: 'block',
+            fontSize: '13px',
+            fontWeight: '500',
+            color: '#374151',
+            marginBottom: '4px'
+          }}>
+            {item.type === 'header' ? 'Rubriktext' : 'Frågetext'}
+          </label>
+          <input
+            type="text"
+            value={item.label}
+            onChange={(e) => updateItem(sectionId, item.id, { label: e.target.value })}
+            placeholder={item.type === 'header' ? 'Skriv rubrik...' : 'Skriv din fråga...'}
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              fontSize: '14px',
+              background: 'white'
+            }}
+          />
         </div>
+
+        {item.type !== 'header' && (
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            flexWrap: 'wrap'
+          }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '14px',
+              color: '#374151',
+              cursor: 'pointer'
+            }}>
+              <input
+                type="checkbox"
+                checked={item.required}
+                onChange={(e) => updateItem(sectionId, item.id, { required: e.target.checked })}
+                disabled={loading}
+                style={{
+                  width: '14px',
+                  height: '14px'
+                }}
+              />
+              Obligatorisk
+            </label>
+
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '14px',
+              color: '#374151',
+              cursor: 'pointer'
+            }}>
+              <input
+                type="checkbox"
+                checked={item.allowImages}
+                onChange={(e) => updateItem(sectionId, item.id, { allowImages: e.target.checked })}
+                disabled={loading}
+                style={{
+                  width: '14px',
+                  height: '14px'
+                }}
+              />
+              Tillåt bilder
+            </label>
+          </div>
+        )}
       </div>
     );
   };
 
-  if (!currentUser) {
-    return <div className="error-state">Du måste vara inloggad för att skapa mallar</div>;
+  if (initialLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '400px'
+      }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          border: '3px solid #f3f4f6',
+          borderTop: '3px solid #0066cc',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+      </div>
+    );
   }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div className="header-content">
-          <h2>{isEdit ? 'Redigera mall' : 'Skapa ny mall'}</h2>
-          <p className="header-subtitle">
-            {isEdit ? 'Uppdatera din kontrollmall' : 'Bygg en anpassad kontrollmall'}
+    <div style={{
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: windowWidth > 1024 ? '0 24px' : '0 16px'
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: windowWidth > 768 ? 'center' : 'flex-start',
+        flexDirection: windowWidth > 768 ? 'row' : 'column',
+        gap: windowWidth > 768 ? '0' : '24px',
+        marginBottom: '32px'
+      }}>
+        <div>
+          <h1 style={{
+            fontSize: windowWidth > 768 ? '32px' : '28px',
+            fontWeight: '700',
+            margin: '0 0 8px 0',
+            color: '#111827'
+          }}>
+            {isEdit ? 'Redigera mall' : 'Skapa ny mall'}
+          </h1>
+          <p style={{
+            color: '#6b7280',
+            margin: 0,
+            fontSize: '16px'
+          }}>
+            {isEdit ? 'Uppdatera din kontrollmall' : 'Skapa en ny mall för dina kontroller'}
           </p>
         </div>
-        <div className="header-actions">
+        
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          flexDirection: windowWidth > 480 ? 'row' : 'column'
+        }}>
           <button
             onClick={() => navigate('/templates')}
-            className="button secondary"
             disabled={loading}
+            style={{
+              padding: '12px 24px',
+              background: '#f3f4f6',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#374151',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#e5e7eb';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#f3f4f6';
+              }
+            }}
           >
             Avbryt
           </button>
+          
           <button
             onClick={handleSave}
-            className="button primary"
-            disabled={loading}
+            disabled={loading || !templateData.name.trim()}
+            style={{
+              padding: '12px 24px',
+              background: (loading || !templateData.name.trim()) ? '#9ca3af' : '#0066cc',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: 'white',
+              cursor: (loading || !templateData.name.trim()) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading && templateData.name.trim()) {
+                e.currentTarget.style.background = '#0052a3';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading && templateData.name.trim()) {
+                e.currentTarget.style.background = '#0066cc';
+              }
+            }}
           >
             {loading ? (
               <>
-                <div className="spinner"></div>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid white',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
                 {isEdit ? 'Uppdaterar...' : 'Sparar...'}
               </>
             ) : (
@@ -321,158 +493,441 @@ const TemplateBuilder = () => {
         </div>
       </div>
 
-      <div className="page-content">
-        {error && (
-          <div className="error-message">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="15" y1="9" x2="9" y2="15"/>
-              <line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
-            {error}
+      {error && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#fee2e2',
+          border: '1px solid #fecaca',
+          borderRadius: '8px',
+          color: '#dc2626',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          {error}
+        </div>
+      )}
+
+      {/* Grundläggande information */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        padding: '24px',
+        marginBottom: '32px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+      }}>
+        <h2 style={{
+          fontSize: '20px',
+          fontWeight: '600',
+          margin: '0 0 16px 0',
+          color: '#111827'
+        }}>
+          Grundläggande information
+        </h2>
+        
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: windowWidth > 768 ? '1fr 1fr' : '1fr',
+          gap: '20px'
+        }}>
+          <div>
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#374151',
+              marginBottom: '6px'
+            }}>
+              Mallnamn *
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={templateData.name}
+              onChange={handleBasicInfoChange}
+              placeholder="T.ex. Årlig elsäkerhetskontroll"
+              required
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                fontSize: '14px',
+                background: 'white'
+              }}
+            />
+          </div>
+
+          <div style={{ gridColumn: windowWidth > 768 ? 'span 2' : 'span 1' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#374151',
+              marginBottom: '6px'
+            }}>
+              Beskrivning
+            </label>
+            <textarea
+              name="description"
+              value={templateData.description}
+              onChange={handleBasicInfoChange}
+              placeholder="Kort beskrivning av vad mallen används till"
+              rows="3"
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                fontSize: '14px',
+                background: 'white',
+                resize: 'vertical'
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Sektioner */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        padding: '24px',
+        marginBottom: '32px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+      }}>
+        <h2 style={{
+          fontSize: '20px',
+          fontWeight: '600',
+          margin: '0 0 8px 0',
+          color: '#111827'
+        }}>
+          Kontrollpunkter
+        </h2>
+        <p style={{
+          color: '#6b7280',
+          marginBottom: '24px',
+          fontSize: '14px'
+        }}>
+          Organisera dina kontrollpunkter i sektioner
+        </p>
+
+        {templateData.sections.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '48px',
+            color: '#6b7280',
+            background: '#f9fafb',
+            borderRadius: '8px',
+            border: '1px dashed #e5e7eb'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              background: '#f3f4f6',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14,2 14,8 20,8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10,9 9,9 8,9"/>
+              </svg>
+            </div>
+            <h3 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              margin: '0 0 8px 0'
+            }}>
+              Inga sektioner ännu
+            </h3>
+            <p style={{ margin: 0 }}>
+              Lägg till din första sektion för att komma igång
+            </p>
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px'
+          }}>
+            {templateData.sections.map((section, sectionIndex) => (
+              <div 
+                key={section.id} 
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  overflow: 'hidden'
+                }}
+              >
+                {/* Section Header */}
+                <div style={{
+                  background: '#f9fafb',
+                  padding: '16px 20px',
+                  borderBottom: '1px solid #e5e7eb',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: '16px'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="text"
+                      value={section.name}
+                      onChange={(e) => updateSection(section.id, { name: e.target.value })}
+                      placeholder={`Sektion ${sectionIndex + 1}`}
+                      disabled={loading}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        background: 'white',
+                        marginBottom: '8px'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={section.description || ''}
+                      onChange={(e) => updateSection(section.id, { description: e.target.value })}
+                      placeholder="Beskrivning av sektionen (valfritt)"
+                      disabled={loading}
+                      style={{
+                        width: '100%',
+                        padding: '6px 12px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        background: 'white',
+                        color: '#6b7280'
+                      }}
+                    />
+                  </div>
+                  
+                  <button
+                    onClick={() => deleteSection(section.id)}
+                    disabled={loading}
+                    style={{
+                      padding: '8px',
+                      background: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      color: '#dc2626',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!loading) {
+                        e.currentTarget.style.background = '#fecaca';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!loading) {
+                        e.currentTarget.style.background = '#fee2e2';
+                      }
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3,6 5,6 21,6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Section Content */}
+                <div style={{ padding: '20px' }}>
+                  {/* Items */}
+                  {section.items && section.items.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      {section.items.map(item => renderItemBuilder(section.id, item))}
+                    </div>
+                  )}
+
+                  {/* Add Item buttons */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                    gap: '8px'
+                  }}>
+                    <button
+                      onClick={() => addItem(section.id, 'yesno')}
+                      disabled={loading}
+                      style={{
+                        padding: '12px 16px',
+                        background: '#dbeafe',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '6px',
+                        color: '#1d4ed8',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.background = '#bfdbfe';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.background = '#dbeafe';
+                        }
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="9,11 12,14 22,4"/>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                      </svg>
+                      Ja/Nej fråga
+                    </button>
+                    
+                    <button
+                      onClick={() => addItem(section.id, 'text')}
+                      disabled={loading}
+                      style={{
+                        padding: '12px 16px',
+                        background: '#dcfce7',
+                        border: '1px solid #bbf7d0',
+                        borderRadius: '6px',
+                        color: '#15803d',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.background = '#bbf7d0';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.background = '#dcfce7';
+                        }
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                      Textfält
+                    </button>
+                    
+                    <button
+                      onClick={() => addItem(section.id, 'header')}
+                      disabled={loading}
+                      style={{
+                        padding: '12px 16px',
+                        background: '#fef3c7',
+                        border: '1px solid #fde68a',
+                        borderRadius: '6px',
+                        color: '#d97706',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.background = '#fde68a';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.background = '#fef3c7';
+                        }
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M6 12h12"/>
+                        <path d="M6 20V4"/>
+                        <path d="M18 20V4"/>
+                      </svg>
+                      Rubrik
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="template-builder">
-          {/* Grundläggande information */}
-          <div className="builder-section">
-            <h3>Grundläggande information</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="name">Mallnamn *</label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={templateData.name}
-                  onChange={handleBasicInfoChange}
-                  placeholder="T.ex. Årlig elsäkerhetskontroll"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="description">Beskrivning</label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={templateData.description}
-                  onChange={handleBasicInfoChange}
-                  placeholder="Kort beskrivning av vad mallen används till"
-                  rows="3"
-                  disabled={loading}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Sektioner */}
-          <div className="builder-section">
-            <div className="section-header">
-              <h3>Kontrollpunkter</h3>
-              <button
-                onClick={addSection}
-                className="button secondary"
-                disabled={loading}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Lägg till sektion
-              </button>
-            </div>
-
-            {templateData.sections.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                    <path d="M9 11H5a2 2 0 0 0-2 2v3c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2z"/>
-                    <path d="M19 11H15a2 2 0 0 0-2 2v3c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2z"/>
-                  </svg>
-                </div>
-                <h4>Inga sektioner än</h4>
-                <p>Börja med att lägga till din första sektion</p>
-                <button
-                  onClick={addSection}
-                  className="button primary"
-                  disabled={loading}
-                >
-                  Lägg till sektion
-                </button>
-              </div>
-            ) : (
-              <div className="sections-list">
-                {templateData.sections.map((section, sectionIndex) => (
-                  <div key={section.id} className="template-section">
-                    <div className="section-header">
-                      <input
-                        type="text"
-                        value={section.title}
-                        onChange={(e) => updateSection(section.id, { title: e.target.value })}
-                        className="section-title-input"
-                        placeholder="Sektionsnamn"
-                        disabled={loading}
-                      />
-                      <div className="section-actions">
-                        <div className="dropdown">
-                          <button className="dropdown-trigger">
-                            Lägg till
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="6,9 12,15 18,9"/>
-                            </svg>
-                          </button>
-                          <div className="dropdown-menu">
-                            <button onClick={() => addItem(section.id, 'yesno')}>
-                              JA/NEJ fråga
-                            </button>
-                            <button onClick={() => addItem(section.id, 'checkbox')}>
-                              Kryssruta
-                            </button>
-                            <button onClick={() => addItem(section.id, 'text')}>
-                              Textfält
-                            </button>
-                            <button onClick={() => addItem(section.id, 'header')}>
-                              Rubrik
-                            </button>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => deleteSection(section.id)}
-                          className="delete-section-btn"
-                          title="Ta bort sektion"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3,6 5,6 21,6"/>
-                            <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="section-items">
-                      {section.items.length === 0 ? (
-                        <div className="empty-section">
-                          <p>Inga kontrollpunkter i denna sektion</p>
-                          <button
-                            onClick={() => addItem(section.id, 'yesno')}
-                            className="button secondary small"
-                          >
-                            Lägg till första punkten
-                          </button>
-                        </div>
-                      ) : (
-                        section.items.map((item, itemIndex) => 
-                          renderItem(section.id, item, itemIndex)
-                        )
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Add Section Button */}
+        <div style={{ 
+          marginTop: templateData.sections.length > 0 ? '24px' : '16px',
+          textAlign: 'center'
+        }}>
+          <button
+            onClick={addSection}
+            disabled={loading}
+            style={{
+              padding: '14px 28px',
+              background: '#0066cc',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#0052a3';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#0066cc';
+                e.currentTarget.style.transform = 'translateY(0px)';
+              }
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="16"/>
+              <line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            Lägg till ny sektion
+          </button>
         </div>
       </div>
     </div>
