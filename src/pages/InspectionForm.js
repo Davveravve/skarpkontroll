@@ -113,18 +113,29 @@ const InspectionForm = () => {
   }, [customerId, addressId, installationId, currentUser]);
 
   const buildSectionsFromTemplates = (selectedTemplateIds) => {
+    console.log('🔍 DEBUG: buildSectionsFromTemplates anropad med IDs:', selectedTemplateIds);
     const allSections = [];
     
     selectedTemplateIds.forEach(templateId => {
       const template = templates.find(t => t.id === templateId);
+      console.log('📋 DEBUG: Hittad mall:', template);
+      
       if (template && template.sections) {
-        template.sections.forEach(section => {
+        console.log('🗂️ DEBUG: Antal sektioner i mall:', template.sections.length);
+        
+        template.sections.forEach((section, index) => {
+          const sectionName = section.name || section.title || `Sektion ${index + 1}`;
+          console.log(`✅ DEBUG: Använder sektionsnamn: "${sectionName}"`);
+          
           allSections.push({
-            title: `${section.title} (${template.name})`, // Lägg till mallnamn för tydlighet
+            // Spara både det rena namnet OCH det fullständiga namnet
+            name: sectionName,                                    // NYTT: Rena sektionsnamnet
+            title: `${sectionName} (${template.name})`,          // Fullständiga titeln med mallnamn
+            templateName: template.name,                          // NYTT: Mallnamn separat
             items: section.items.map(item => ({
               ...item,
               value: item.type === 'yesno' ? null : 
-                     item.type === 'checkbox' ? false : '',
+                    item.type === 'checkbox' ? false : '',
               notes: '',
               images: []
             }))
@@ -133,6 +144,7 @@ const InspectionForm = () => {
       }
     });
     
+    console.log('🎯 DEBUG: Slutresultat allSections:', allSections);
     return allSections;
   };
 

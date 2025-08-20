@@ -23,6 +23,7 @@ import InspectionDetail from './pages/InspectionDetail';
 import ImageUploadTest from './pages/ImageUploadTest';
 import SupabaseTest from './pages/SupabaseTest';
 import SubscriptionManager from './components/subscription/SubscriptionManager';
+import ProfilePage from './pages/ProfilePage';
 import './App.css';
 
 // Login wrapper
@@ -68,6 +69,9 @@ function AppContent() {
         {/* Alla rutter är nu skyddade och använder MainLayout */}
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
+          
+          {/* Profil - LÄGG TILL DENNA */}
+          <Route path="profile" element={<ProfilePage />} />
           
           {/* Kunder */}
           <Route path="customers" element={<CustomerList />} />

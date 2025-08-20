@@ -1,4 +1,4 @@
-// src/components/layout/MainLayout.js - Responsive layout with SKARP branding
+// src/components/layout/MainLayout.js - Responsive layout with clickable user cards
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,7 +8,6 @@ const MainLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // Handle window resize
@@ -61,7 +60,6 @@ const MainLayout = () => {
   const handleLogout = async () => {
     try {
       await logout();
-      setUserMenuOpen(false);
       setMobileMenuOpen(false);
       navigate('/auth');
     } catch (error) {
@@ -226,8 +224,9 @@ const MainLayout = () => {
               Logga ut
             </button>
 
-            {/* User Profile */}
-            <div 
+            {/* Clickable User Profile Card */}
+            <Link
+              to="/profile"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -237,9 +236,18 @@ const MainLayout = () => {
                 borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--color-border)',
                 cursor: 'pointer',
-                transition: 'all var(--transition-normal)'
+                transition: 'all var(--transition-normal)',
+                textDecoration: 'none',
+                color: 'inherit'
               }}
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--color-surface-hover)';
+                e.currentTarget.style.borderColor = 'var(--color-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--color-surface)';
+                e.currentTarget.style.borderColor = 'var(--color-border)';
+              }}
             >
               <div 
                 style={{
@@ -276,56 +284,12 @@ const MainLayout = () => {
                 </div>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="6,9 12,15 18,9"/>
+                <polyline points="9,18 15,12 9,6"/>
               </svg>
-            </div>
-
-            {/* User Dropdown Menu - Only Subscription now */}
-            {userMenuOpen && (
-              <div 
-                style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: 'var(--space-xl)',
-                  right: 'var(--space-xl)',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-lg)',
-                  boxShadow: 'var(--shadow-xl)',
-                  marginBottom: 'var(--space-md)',
-                  zIndex: 1100
-                }}
-              >
-                <div style={{ padding: 'var(--space-sm) 0' }}>
-                  <Link 
-                    to="/subscription"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--space-md)',
-                      padding: 'var(--space-md) var(--space-lg)',
-                      color: 'var(--color-text-secondary)',
-                      textDecoration: 'none',
-                      fontSize: 'var(--font-size-sm)',
-                      fontWeight: 'var(--font-weight-medium)',
-                      transition: 'all var(--transition-normal)'
-                    }}
-                    onClick={() => setUserMenuOpen(false)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="3"/>
-                      <path d="m12 1 1.84 3.68L18 5.84l-1.16 3.84L20 12l-3.16 2.32L18 18.16l-3.84-1.16L12 23l-2.32-3.16L5.84 18l1.16-3.84L4 12l3.16-2.32L5.84 5.84l3.84 1.16z"/>
-                    </svg>
-                    Abonnemang
-                  </Link>
-                </div>
-              </div>
-            )}
+            </Link>
           </div>
         </aside>
       )}
-
-      {/* Remove the collapsed sidebar completely since we're using mobile menu instead */}
 
       {/* Mobile Header */}
       {showMobileHeader && (
@@ -463,7 +427,28 @@ const MainLayout = () => {
               borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--color-border)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
+              {/* Clickable User Profile Card - Mobile */}
+              <Link 
+                to="/profile"
+                style={{
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 'var(--space-md)', 
+                  marginBottom: 'var(--space-lg)',
+                  padding: 'var(--space-md)',
+                  borderRadius: 'var(--radius-lg)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  transition: 'background-color 0.2s ease'
+                }}
+                onClick={() => setMobileMenuOpen(false)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--color-surface-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
                 <div 
                   style={{
                     width: '40px',
@@ -479,7 +464,7 @@ const MainLayout = () => {
                 >
                   {getInitials(userProfile?.contactPerson || currentUser?.displayName)}
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ 
                     color: 'var(--color-text-primary)', 
                     fontWeight: 'var(--font-weight-semibold)',
@@ -494,7 +479,10 @@ const MainLayout = () => {
                     {userProfile?.subscription?.plan === 'professional' ? 'Professional Plan' : 'Gratis Plan'}
                   </div>
                 </div>
-              </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9,18 15,12 9,6"/>
+                </svg>
+              </Link>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
                 <button 
@@ -540,21 +528,6 @@ const MainLayout = () => {
             zIndex: 999
           }}
           onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* User menu overlay för desktop */}
-      {userMenuOpen && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 999
-          }}
-          onClick={() => setUserMenuOpen(false)}
         />
       )}
 

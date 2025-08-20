@@ -10,7 +10,7 @@ import { supabase } from '../services/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
 const InspectionDetail = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const { customerId, addressId, installationId, inspectionId } = useParams();
   const navigate = useNavigate();
   const confirmation = useConfirmation();
@@ -480,10 +480,7 @@ const InspectionDetail = () => {
     setGeneratingPdf(true);
     
     try {
-      // Hämta användarprofil för logotyp (om du har implementerat det)
-      const userProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
-      
-      // Använd den externa PDF-generatorn
+      // Skicka med userProfile från useAuth hook (som redan finns längst upp i komponenten)
       const doc = await generateInspectionPDF(inspection, installation, customer, address, userProfile);
       
       if (doc) {
@@ -1219,7 +1216,7 @@ const InspectionDetail = () => {
                   }}>
                     <input
                       type="text"
-                      value={section.name}
+                      value={section.name || section.title}
                       onChange={(e) => {
                         const updatedInspection = { ...inspection };
                         updatedInspection.sections[sectionIndex].name = e.target.value;

@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js - Komplett användarhantering med debug
+// src/contexts/AuthContext.js - Komplett användarhantering med lösenordsåterställning
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword, 
@@ -6,9 +6,10 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
-  sendEmailVerification
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
 const AuthContext = createContext();
@@ -55,11 +56,10 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('❌ AuthContext: Error fetching user profile:', error);
     }
-    return null;
   };
 
   // Registrera ny användare
-  const register = async (email, password, userData) => {
+  const register = async (email, password, companyName, contactPerson, phone = '') => {
     try {
       console.log('📝 AuthContext: Starting registration for', email);
       setAuthError(null);
@@ -68,54 +68,50 @@ export const AuthProvider = ({ children }) => {
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
       console.log('✅ AuthContext: Firebase user created', user.uid);
       
-      // Uppdatera profil med företagsnamn som displayName
+      // Uppdatera displayName
       await updateProfile(user, {
-        displayName: userData.companyName
+        displayName: contactPerson
       });
-
-      // Skicka verifieringsmail
+      console.log('✅ AuthContext: Display name updated');
+      
+      // Skicka verifieringsemail
       await sendEmailVerification(user);
-      console.log('📧 AuthContext: Verification email sent');
-
-      // Skapa användarprofil i Firestore med gratis nivå
+      console.log('✅ AuthContext: Verification email sent');
+      
+      // Skapa användarprofil i Firestore
+      const trialEnds = new Date();
+      trialEnds.setDate(trialEnds.getDate() + 14); // 14 dagars gratis provperiod
+      
       const userProfileData = {
         uid: user.uid,
         email: user.email,
-        companyName: userData.companyName,
-        contactPerson: userData.contactPerson,
-        phone: userData.phone || '',
-        emailVerified: false,
+        companyName,
+        contactPerson,
+        phone: phone || '',
+        emailVerified: user.emailVerified,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastLogin: serverTimestamp(),
         subscription: {
-          plan: 'free',
+          type: 'trial',
           status: 'active',
-          customersLimit: 1,
-          installationsLimit: 1, 
-          inspectionsLimit: 1,
-          templatesLimit: 3,
-          storageLimit: 1, // GB
-          storageUsed: 0,
-          features: ['basic_templates', 'pdf_export'],
-          nextBilling: null,
-          cancelAtPeriodEnd: false
+          trialEnds: trialEnds,
+          customersLimit: 50,
+          templatesLimit: 20,
+          storageLimit: 1024 * 1024 * 1024, // 1GB
+          storageUsed: 0
         },
         stats: {
           totalCustomers: 0,
+          totalAddresses: 0,
           totalInstallations: 0,
           totalInspections: 0,
           totalTemplates: 0
-        },
-        settings: {
-          notifications: true,
-          emailReports: false,
-          darkMode: false
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastLogin: new Date()
+        }
       };
-
+      
       await setDoc(doc(db, 'users', user.uid), userProfileData);
-      setUserProfile(userProfileData);
+      await fetchUserProfile(user.uid);
       console.log('✅ AuthContext: User profile created in Firestore');
       
       return { success: true, user, requiresVerification: true };
@@ -139,8 +135,8 @@ export const AuthProvider = ({ children }) => {
       if (user.uid) {
         console.log('📝 AuthContext: Updating last login...');
         await updateDoc(doc(db, 'users', user.uid), {
-          lastLogin: new Date(),
-          updatedAt: new Date()
+          lastLogin: serverTimestamp(),
+          updatedAt: serverTimestamp()
         });
         console.log('✅ AuthContext: Last login updated');
       }
@@ -170,76 +166,96 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Återställ lösenord
+  const resetPassword = async (email) => {
+    try {
+      console.log('🔄 AuthContext: Sending password reset for', email);
+      setAuthError(null);
+      
+      await sendPasswordResetEmail(auth, email);
+      console.log('✅ AuthContext: Password reset email sent');
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ AuthContext: Password reset error:', error);
+      setAuthError(error.message);
+      return { success: false, error: getErrorMessage(error.code) };
+    }
+  };
+
   // Uppdatera abonnemang
   const updateSubscription = async (subscriptionData) => {
     if (!currentUser) return { success: false, error: 'Inte inloggad' };
     
     try {
-      const updatedProfile = {
-        ...userProfile,
-        subscription: { 
-          ...userProfile.subscription, 
-          ...subscriptionData,
-          updatedAt: new Date()
-        },
-        updatedAt: new Date()
-      };
+      console.log('💳 AuthContext: Updating subscription for', currentUser.uid);
       
       await updateDoc(doc(db, 'users', currentUser.uid), {
-        subscription: updatedProfile.subscription,
-        updatedAt: new Date()
+        subscription: subscriptionData,
+        updatedAt: serverTimestamp()
       });
       
-      setUserProfile(updatedProfile);
+      await fetchUserProfile(currentUser.uid);
+      console.log('✅ AuthContext: Subscription updated');
       
       return { success: true };
     } catch (error) {
-      console.error('Error updating subscription:', error);
+      console.error('❌ AuthContext: Subscription update error:', error);
       return { success: false, error: error.message };
     }
   };
 
-  // Applicera rabattkod
+  // Applicera kampanjkod
   const applyPromoCode = async (promoCode) => {
-    const promoCodes = {
-      'WELCOME20': { 
-        discount: 20, 
-        type: 'percentage', 
-        description: '20% rabatt första månaden',
-        validUntil: '2025-12-31'
-      },
-      'STARTER50': { 
-        discount: 50, 
-        type: 'percentage', 
-        description: '50% rabatt första månaden',
-        validUntil: '2025-12-31'
-      },
-      'FREE30': { 
-        discount: 30, 
-        type: 'days', 
-        description: '30 extra gratis dagar',
-        validUntil: '2025-12-31'
-      }
-    };
-    
-    const promo = promoCodes[promoCode.toUpperCase()];
-    if (!promo) {
-      return { success: false, error: 'Ogiltig rabattkod' };
-    }
-    
-    if (new Date() > new Date(promo.validUntil)) {
-      return { success: false, error: 'Rabattkoden har gått ut' };
-    }
-    
-    return { success: true, promo };
-  };
-
-  // Kontrollera abonnemangsgränser
-  const checkLimits = async () => {
-    if (!userProfile?.subscription) return { withinLimits: true };
+    if (!currentUser || !userProfile) return { success: false, error: 'Inte inloggad' };
     
     try {
-      const { subscription, stats } = userProfile;
+      console.log('🎫 AuthContext: Applying promo code:', promoCode);
+      
+      // Här skulle du normalt validera kampanjkoden mot din backend
+      // För nu, hårdkoda några exempel
+      const validPromoCodes = {
+        'TRIAL30': { days: 30, type: 'trial_extension' },
+        'WELCOME50': { discount: 50, type: 'discount' }
+      };
+      
+      const promo = validPromoCodes[promoCode.toUpperCase()];
+      if (!promo) {
+        return { success: false, error: 'Ogiltig kampanjkod' };
+      }
+      
+      let updatedSubscription = { ...userProfile.subscription };
+      
+      if (promo.type === 'trial_extension') {
+        const currentEnd = userProfile.subscription.trialEnds || new Date();
+        const newEnd = new Date(currentEnd);
+        newEnd.setDate(newEnd.getDate() + promo.days);
+        updatedSubscription.trialEnds = newEnd;
+      }
+      
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        subscription: updatedSubscription,
+        appliedPromoCodes: [...(userProfile.appliedPromoCodes || []), promoCode],
+        updatedAt: serverTimestamp()
+      });
+      
+      await fetchUserProfile(currentUser.uid);
+      console.log('✅ AuthContext: Promo code applied');
+      
+      return { success: true, promo };
+    } catch (error) {
+      console.error('❌ AuthContext: Promo code error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Kontrollera gränser
+  const checkLimits = async () => {
+    if (!userProfile) return { withinLimits: true, limits: {} };
+    
+    try {
+      const subscription = userProfile.subscription;
+      const stats = userProfile.stats;
       
       const limits = {
         customers: {
@@ -282,7 +298,7 @@ export const AuthProvider = ({ children }) => {
       
       await updateDoc(doc(db, 'users', currentUser.uid), {
         stats: updatedStats,
-        updatedAt: new Date()
+        updatedAt: serverTimestamp()
       });
       
       setUserProfile(prev => ({
@@ -334,7 +350,7 @@ export const AuthProvider = ({ children }) => {
         if (user.emailVerified && userProfile && !userProfile.emailVerified) {
           await updateDoc(doc(db, 'users', user.uid), {
             emailVerified: true,
-            updatedAt: new Date()
+            updatedAt: serverTimestamp()
           });
         }
         
@@ -362,6 +378,7 @@ export const AuthProvider = ({ children }) => {
     register,
     login,
     logout,
+    resetPassword,
     updateSubscription,
     applyPromoCode,
     checkLimits,
