@@ -280,7 +280,7 @@ const ControlView = () => {
     };
     
     try {
-      if (isOnline) {
+      // Always try online operations (offline mode removed)
         // Try online save first
         const newNode = {
           ...nodeData,
@@ -301,9 +301,6 @@ const ControlView = () => {
         }
         
         console.log('✅ Node added online successfully');
-      } else {
-        throw new Error('Network unavailable - using offline mode');
-      }
       
     } catch (error) {
       console.error('❌ Failed to add node:', error);
@@ -333,7 +330,7 @@ const ControlView = () => {
     };
 
     try {
-      if (isOnline) {
+      // Always try online operations (offline mode removed)
         // Try online save first
         const newRemark = {
           ...remarkData,
@@ -372,10 +369,6 @@ const ControlView = () => {
         setRemarkImages([]);
         setShowAddRemark(false);
         
-      } else {
-        // Force offline mode
-        throw new Error('Network unavailable - using offline mode');
-      }
       
     } catch (error) {
       console.error('❌ Failed to save remark:', error);
@@ -420,7 +413,7 @@ const ControlView = () => {
     };
 
     try {
-      if (isOnline) {
+      // Always try online operations (offline mode removed)
         // Try online update first
         const remarkRef = doc(db, 'remarks', editingRemarkId);
         await updateDoc(remarkRef, {
@@ -442,10 +435,6 @@ const ControlView = () => {
         // Reset form on successful online save
         cancelEditRemark();
         
-      } else {
-        // Force offline mode
-        throw new Error('Network unavailable - using offline mode');
-      }
       
     } catch (error) {
       // Handle offline or failed online update
@@ -458,14 +447,8 @@ const ControlView = () => {
         cancelEditRemark();
         
         // Show user-friendly offline message
-        if (!isOnline) {
-          setTimeout(() => {
-            console.log('📱 Anmärkning uppdaterad offline - synkar när anslutning återställs');
-          }, 100);
-        }
-      } else {
-        alert('Kunde inte uppdatera anmärkning. Försök igen.');
-      }
+        // Online check removed - always try operation
+        console.log('✅ Remark updated successfully');
     } finally {
       setSaving(false);
     }
@@ -561,7 +544,7 @@ const ControlView = () => {
       const childNodes = findAllChildNodes(nodeId, nodes);
       const allNodesToDelete = [nodeId, ...childNodes.map(n => n.id)];
       
-      if (isOnline) {
+      // Always try online operations (offline mode removed)
         // Online deletion
         for (const nId of allNodesToDelete) {
           const remarksQuery = query(collection(db, 'remarks'), where('nodeId', '==', nId));
@@ -612,7 +595,7 @@ const ControlView = () => {
     }
 
     try {
-      if (isOnline) {
+      // Always try online operations (offline mode removed)
         // Online deletion
         await deleteDoc(doc(db, 'remarks', remarkId));
         
@@ -1179,21 +1162,7 @@ const ControlView = () => {
               {control?.status === 'completed' ? 'Slutförd' : 'Aktiv'}
             </button>
             
-            {!isOnline && (
-              <div style={{
-                padding: '4px 8px',
-                background: '#fef3c7',
-                color: '#92400e',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}>
-                Offline
-              </div>
-            )}
+            {/* Offline status indicator removed */}
           </div>
         </div>
       </div>

@@ -87,52 +87,7 @@ const ControlImageUploader = ({ controlId, nodeId, onImagesUploaded, disabled = 
 
         console.log('Processing image:', fileName, 'Online:', navigator.onLine);
 
-        // Om offline, spara direkt lokalt
-        if (!navigator.onLine) {
-          console.log('📱 Offline mode - saving image locally');
-          
-          const offlineImage = {
-            id: uuidv4(),
-            fileName,
-            originalName: file.name,
-            filePath,
-            blob: uploadFile,
-            createdAt: new Date(),
-            status: 'offline'
-          };
-          
-          // Cacha bilden lokalt med metadata
-          await offlineManager.cacheImage(uploadFile, fileName, {
-            controlId,
-            nodeId,
-            originalName: file.name
-          });
-          
-          // Lägg till i offline-kö
-          offlineManager.queueOperation({
-            type: 'uploadImage',
-            imageData: offlineImage,
-            controlId,
-            nodeId
-          });
-          
-          // Lägg till som offline bild i UI
-          uploadedImages.push({
-            id: offlineImage.id,
-            fileName: offlineImage.fileName,
-            originalName: file.name,
-            url: URL.createObjectURL(uploadFile),
-            status: 'offline',
-            downloadURL: null,
-            size: uploadFile.size || file.size,
-            type: file.type,
-            path: filePath
-          });
-          
-          console.log('✅ Image saved offline for later sync');
-          setUploadProgress(((i + 1) / files.length) * 100);
-          continue;
-        }
+        // Offline mode removed - only online uploads supported
 
         // Online - försök ladda upp
         console.log('🌐 Online mode - uploading to Supabase');
@@ -167,14 +122,9 @@ const ControlImageUploader = ({ controlId, nodeId, onImagesUploaded, disabled = 
           };
           
           // Cacha bilden lokalt med metadata
-          await offlineManager.cacheImage(uploadFile, fileName, {
-            controlId,
-            nodeId,
-            originalName: file.name
-          });
-          
-          // Lägg till i offline-kö
-          offlineManager.queueOperation({
+          // Offline functionality removed
+          console.error('Image upload failed - offline mode removed');
+          alert('Kunde inte ladda upp bild. Kontrollera internetanslutning.');
             type: 'uploadImage',
             imageData: offlineImage,
             controlId,
