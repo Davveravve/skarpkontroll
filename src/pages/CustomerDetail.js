@@ -165,6 +165,34 @@ const CustomerDetail = () => {
     });
   };
 
+  const handleDeleteControl = async (controlId, controlName) => {
+    const confirmed = await confirmation.confirm({
+      title: 'Radera kontroll',
+      message: `Är du säker på att du vill radera kontrollen "${controlName}"? Detta kommer också att radera alla noder och anmärkningar som tillhör kontrollen.`,
+      confirmText: 'Radera',
+      cancelText: 'Avbryt',
+      type: 'danger'
+    });
+
+    if (!confirmed) return;
+
+    setUpdating(true);
+    try {
+      // Ta bort kontrollen från Firestore
+      await deleteDoc(doc(db, 'controls', controlId));
+      
+      // Uppdatera local state
+      setControls(prev => prev.filter(c => c.id !== controlId));
+      
+      console.log('✅ Control deleted successfully');
+    } catch (err) {
+      console.error('Error deleting control:', err);
+      alert('Kunde inte radera kontrollen');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -564,19 +592,15 @@ const CustomerDetail = () => {
             gap: '20px'
           }}>
             {controls.map(control => (
-              <Link 
+              <div 
                 key={control.id} 
-                to={`/controls/${control.id}`}
                 style={{
-                  textDecoration: 'none',
                   background: 'white',
                   border: '1px solid #e5e7eb',
                   borderRadius: '16px',
                   padding: '24px',
-                  cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                  display: 'block',
                   position: 'relative',
                   overflow: 'hidden'
                 }}
@@ -650,7 +674,59 @@ const CustomerDetail = () => {
                     {control.createdAt?.toDate?.()?.toLocaleDateString('sv-SE') || 'Okänt datum'}
                   </span>
                 </div>
-              </Link>
+                
+                {/* Delete button */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDeleteControl(control.id, control.name);
+                  }}
+                  disabled={updating}
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    right: '12px',
+                    background: 'rgba(220, 38, 38, 0.1)',
+                    border: '1px solid rgba(220, 38, 38, 0.2)',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    color: '#dc2626',
+                    cursor: updating ? 'not-allowed' : 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    opacity: updating ? 0.5 : 1,
+                    transition: 'all 0.2s'
+                  }}
+                  title="Ta bort kontroll"
+                  onMouseEnter={(e) => {
+                    if (!updating) {
+                      e.currentTarget.style.background = 'rgba(220, 38, 38, 0.15)';
+                      e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.3)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.2)';
+                  }}
+                >
+                  Ta bort
+                </button>
+                
+                {/* Clickable area (everything except delete button) */}
+                <Link 
+                  to={`/controls/${control.id}`}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: '90px', // Leave space for delete button
+                    bottom: 0,
+                    textDecoration: 'none',
+                    zIndex: 1
+                  }}
+                />
+              </div>
             ))}
           </div>
         )}

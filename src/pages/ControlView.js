@@ -377,9 +377,7 @@ const ControlView = () => {
       console.log('📱 Node queued for offline sync');
       
       if (!isOnline) {
-        setTimeout(() => {
-          alert('Nod sparad offline. Synkas automatiskt när nätet kommer tillbaka.');
-        }, 100);
+        // Remove individual offline alerts - user knows they're offline
       }
       
       return true;
@@ -464,11 +462,7 @@ const ControlView = () => {
         setShowAddRemark(false);
         
         // Show user-friendly offline message
-        if (!isOnline) {
-          setTimeout(() => {
-            alert('Anmärkning sparad offline. Synkas automatiskt när nätet kommer tillbaka.');
-          }, 100);
-        }
+        // Remove individual offline alerts - user knows they're offline
       } else {
         alert('Kunde inte spara anmärkning. Försök igen.');
       }
@@ -732,7 +726,7 @@ const ControlView = () => {
         }
         
         if (!isOnline) {
-          alert('Borttagning köad offline. Utförs när nätet kommer tillbaka.');
+          // Remove individual offline alerts
         }
       }
 
@@ -806,7 +800,7 @@ const ControlView = () => {
           ));
         }
         
-        alert('Borttagning köad offline. Utförs när nätet kommer tillbaka.');
+        // Remove individual offline alerts
       }
       
       // Update local UI immediately

@@ -182,29 +182,40 @@ export class OfflineManager {
       throw new Error('Invalid operation: missing type');
     }
     
+    // Lägg till timeout för operationer
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Operation timeout after 30 seconds')), 30000);
+    });
+    
     try {
       const { db } = await import('../services/firebase');
       const { supabase } = await import('../services/supabase');
       const { collection, addDoc, updateDoc, doc, serverTimestamp, getDocs, query, where, deleteDoc } = await import('firebase/firestore');
       
-      switch (operation.type) {
-        case 'saveRemark':
-          return await this.executeSaveRemark(operation, { db, collection, addDoc, updateDoc, doc, serverTimestamp });
-        case 'uploadImage':
-          return await this.executeUploadImage(operation, { supabase });
-        case 'updateNode':
-          return await this.executeUpdateNode(operation, { db, updateDoc, doc, serverTimestamp });
-        case 'deleteRemark':
-          return await this.executeDeleteRemark(operation, { db, doc, deleteDoc });
-        case 'updateRemark':
-          return await this.executeUpdateRemark(operation, { db, updateDoc, doc, serverTimestamp });
-        case 'addNode':
-          return await this.executeAddNode(operation, { db, collection, addDoc, serverTimestamp });
-        case 'deleteNode':
-          return await this.executeDeleteNode(operation, { db, doc, collection, getDocs, query, where, deleteDoc });
-        default:
-          throw new Error(`Unknown operation type: ${operation.type}`);
-      }
+      const operationPromise = (async () => {
+        switch (operation.type) {
+          case 'saveRemark':
+            return await this.executeSaveRemark(operation, { db, collection, addDoc, updateDoc, doc, serverTimestamp });
+          case 'uploadImage':
+            return await this.executeUploadImage(operation, { supabase });
+          case 'updateNode':
+            return await this.executeUpdateNode(operation, { db, updateDoc, doc, serverTimestamp });
+          case 'deleteRemark':
+            return await this.executeDeleteRemark(operation, { db, doc, deleteDoc });
+          case 'updateRemark':
+            return await this.executeUpdateRemark(operation, { db, updateDoc, doc, serverTimestamp });
+          case 'addNode':
+            return await this.executeAddNode(operation, { db, collection, addDoc, serverTimestamp });
+          case 'deleteNode':
+            return await this.executeDeleteNode(operation, { db, doc, collection, getDocs, query, where, deleteDoc });
+          default:
+            throw new Error(`Unknown operation type: ${operation.type}`);
+        }
+      })();
+      
+      // Race between operation and timeout
+      return await Promise.race([operationPromise, timeoutPromise]);
+      
     } catch (error) {
       // Förbättra felmeddelanden
       const enhancedError = new Error(`Failed to execute ${operation.type}: ${error.message}`);
