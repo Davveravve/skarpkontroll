@@ -61,15 +61,12 @@ export const loadImagesInParallel = async (imageUrls, progressState) => {
  * Ladda och optimera en enskild bild
  */
 const loadOptimizedImage = async (url) => {
-  // Förbättrad cache-nyckel med timestamp för att undvika kollisioner
-  const cacheKey = `${url}_${Date.now()}`;
-  console.log('🖼️ Loading image:', url);
-  
-  // Tillfälligt inaktivera cache för att diagnostisera problemet
-  // if (imageCache.has(cacheKey)) {
-  //   console.log('📋 Using memory cached image:', url);
-  //   return imageCache.get(cacheKey);
-  // }
+  // Kontrollera cache först
+  const cacheKey = url;
+  if (imageCache.has(cacheKey)) {
+    console.log('📋 Using cached image:', url);
+    return imageCache.get(cacheKey);
+  }
 
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -107,10 +104,8 @@ const loadOptimizedImage = async (url) => {
           scaledHeight: canvas.height
         };
         
-        // Tillfälligt inaktivera cache för debugging
-        // imageCache.set(cacheKey, imageData);
-        
-        console.log('✅ Image loaded successfully:', url, 'Dimensions:', imageData.scaledWidth + 'x' + imageData.scaledHeight);
+        // Cacha resultatet
+        imageCache.set(cacheKey, imageData);
         
         resolve(imageData);
         
