@@ -61,26 +61,15 @@ export const loadImagesInParallel = async (imageUrls, progressState) => {
  * Ladda och optimera en enskild bild
  */
 const loadOptimizedImage = async (url) => {
-  // Kontrollera memory cache först
-  const cacheKey = url;
-  if (imageCache.has(cacheKey)) {
-    console.log('📋 Using memory cached image:', url);
-    return imageCache.get(cacheKey);
-  }
-
-  // Kontrollera localStorage cache för offline-stöd
-  try {
-    const offlineCacheKey = `cached_image_${btoa(url).substring(0, 50)}`;
-    const cachedData = localStorage.getItem(offlineCacheKey);
-    if (cachedData) {
-      console.log('💾 Using offline cached image:', url);
-      const imageData = JSON.parse(cachedData);
-      imageCache.set(cacheKey, imageData);
-      return imageData;
-    }
-  } catch (e) {
-    console.warn('Could not check offline cache for image:', url);
-  }
+  // Förbättrad cache-nyckel med timestamp för att undvika kollisioner
+  const cacheKey = `${url}_${Date.now()}`;
+  console.log('🖼️ Loading image:', url);
+  
+  // Tillfälligt inaktivera cache för att diagnostisera problemet
+  // if (imageCache.has(cacheKey)) {
+  //   console.log('📋 Using memory cached image:', url);
+  //   return imageCache.get(cacheKey);
+  // }
 
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -118,17 +107,10 @@ const loadOptimizedImage = async (url) => {
           scaledHeight: canvas.height
         };
         
-        // Cacha resultatet i memory
-        imageCache.set(cacheKey, imageData);
+        // Tillfälligt inaktivera cache för debugging
+        // imageCache.set(cacheKey, imageData);
         
-        // Spara även till localStorage för offline-användning
-        try {
-          const offlineCacheKey = `cached_image_${btoa(url).substring(0, 50)}`;
-          localStorage.setItem(offlineCacheKey, JSON.stringify(imageData));
-          console.log('💾 Saved image to offline cache:', url);
-        } catch (e) {
-          console.warn('Could not save image to offline cache:', e);
-        }
+        console.log('✅ Image loaded successfully:', url, 'Dimensions:', imageData.scaledWidth + 'x' + imageData.scaledHeight);
         
         resolve(imageData);
         

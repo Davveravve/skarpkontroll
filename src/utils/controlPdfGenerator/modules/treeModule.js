@@ -249,10 +249,17 @@ const renderActualImages = async (pdfState, images, yPos, xPos, design, imageCac
     const imageUrl = image.url || image.downloadURL;
     if (!imageUrl) continue;
     
-    // Hämta från cache istället för att ladda igen
+    // Hämta bild från cache med förbättrad nyckelhantering
     let cachedImage = null;
     if (imageCache) {
-      cachedImage = imageCache.get(imageUrl);
+      // Försök hitta bilden i cache med olika nycklar
+      for (let [key, value] of imageCache.entries()) {
+        if (key.includes(imageUrl) || key === imageUrl) {
+          cachedImage = value;
+          console.log('🎯 Found cached image for:', imageUrl, 'with key:', key);
+          break;
+        }
+      }
     }
     
     if (cachedImage) {
