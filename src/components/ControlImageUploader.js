@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { v4 as uuidv4 } from 'uuid';
-import { offlineManager } from '../utils/offlineManager';
+// Offline functionality removed
 
 const ControlImageUploader = ({ controlId, nodeId, onImagesUploaded, disabled = false }) => {
   const [uploading, setUploading] = useState(false);

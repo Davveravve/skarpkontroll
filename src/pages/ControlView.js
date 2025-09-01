@@ -6,10 +6,10 @@ import { db } from '../services/firebase';
 import { supabase } from '../services/supabase';
 import ControlImageUploader from '../components/ControlImageUploader';
 import ImageModal from '../components/ImageModal';
-import NotificationSystem from '../components/NotificationSystem';
+// NotificationSystem removed with offline functionality
 import { generateControlPDF } from '../utils/controlPdfGenerator';
 import { useAuth } from '../contexts/AuthContext';
-import { offlineManager } from '../utils/offlineManager';
+// Offline functionality removed
 
 const ControlView = () => {
   const { currentUser, userProfile } = useAuth();
@@ -48,9 +48,7 @@ const ControlView = () => {
   const [allModalImages, setAllModalImages] = useState([]);
   const [modalImageIndex, setModalImageIndex] = useState(0);
   const [generatingPDF, setGeneratingPDF] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [syncProgress, setSyncProgress] = useState(null);
-  const [pendingOperations, setPendingOperations] = useState(0);
+  // Offline functionality completely removed
 
   // Handle window resize
   useEffect(() => {
@@ -59,29 +57,7 @@ const ControlView = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Handle network status
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    // Set up offline manager progress listener
-    offlineManager.addProgressListener((progress, pending) => {
-      setSyncProgress(progress);
-      setPendingOperations(pending);
-    });
-    
-    // Initial status
-    const status = offlineManager.getStatus();
-    setPendingOperations(status.pendingOperations);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  // Network status tracking removed
 
   // Load initial data
   useEffect(() => {
@@ -330,14 +306,8 @@ const ControlView = () => {
       }
       
     } catch (error) {
-      console.log('💾 Adding node offline:', error.message);
-      
-      const success = await saveNodeOffline(nodeData, createAsChild);
-      
-      if (!success) {
-        alert('Kunde inte lägga till nod. Försök igen.');
-        return;
-      }
+      console.error('❌ Failed to add node:', error);
+      alert('Kunde inte lägga till nod. Kontrollera internetanslutning och försök igen.');
     } finally {
       setNewNodeName('');
       setShowAddNode(false);
@@ -345,48 +315,7 @@ const ControlView = () => {
     }
   };
   
-  const saveNodeOffline = async (nodeData, createAsChild) => {
-    try {
-      const tempId = `offline_node_${Date.now()}`;
-      const offlineNode = {
-        id: tempId,
-        ...nodeData,
-        createdAt: new Date(),
-        status: 'offline'
-      };
-
-      // Add to local UI immediately
-      setNodes(prev => [...prev, offlineNode]);
-
-      // Queue for later sync
-      offlineManager.queueOperation({
-        type: 'addNode',
-        nodeData,
-        tempId
-      });
-
-      // Handle first node case offline
-      if (!currentNode && !control.rootNodeId) {
-        offlineManager.queueOperation({
-          type: 'updateControl',
-          controlId,
-          updates: { rootNodeId: tempId }
-        });
-      }
-
-      console.log('📱 Node queued for offline sync');
-      
-      if (!isOnline) {
-        // Remove individual offline alerts - user knows they're offline
-      }
-      
-      return true;
-      
-    } catch (error) {
-      console.error('❌ Failed to save node offline:', error);
-      return false;
-    }
-  };
+  // Offline save functionality removed
 
   const handleAddRemark = async (e) => {
     e.preventDefault();
@@ -449,73 +378,14 @@ const ControlView = () => {
       }
       
     } catch (error) {
-      // Handle offline or failed online save
-      console.log('💾 Saving remark offline:', error.message);
-      
-      const success = await saveRemarkOffline(remarkData);
-      
-      if (success) {
-        // Reset form after successful offline save
-        setNewRemarkText('');
-        setNewRemarkPriority('');
-        setRemarkImages([]);
-        setShowAddRemark(false);
-        
-        // Show user-friendly offline message
-        // Remove individual offline alerts - user knows they're offline
-      } else {
-        alert('Kunde inte spara anmärkning. Försök igen.');
-      }
+      console.error('❌ Failed to save remark:', error);
+      alert('Kunde inte spara anmärkning. Kontrollera internetanslutning och försök igen.');
     } finally {
       setSaving(false);
     }
   };
   
-  const saveRemarkOffline = async (remarkData) => {
-    try {
-      const tempId = `offline_${Date.now()}`;
-      const offlineRemark = {
-        id: tempId,
-        ...remarkData,
-        createdAt: new Date(),
-        status: 'offline'
-      };
-      
-      delete offlineRemark.nodeHasRemarks; // Clean up before adding to UI
-
-      // Add to local UI immediately
-      setRemarks(prev => [offlineRemark, ...prev]);
-
-      // Queue for later sync
-      offlineManager.queueOperation({
-        type: 'saveRemark',
-        remarkData,
-        tempId
-      });
-
-      // Update node locally if needed
-      if (!remarkData.nodeHasRemarks) {
-        setCurrentNode(prev => ({ ...prev, hasRemarks: true }));
-        setNodes(prev => prev.map(node => 
-          node.id === remarkData.nodeId ? { ...node, hasRemarks: true } : node
-        ));
-
-        // Queue the node update
-        offlineManager.queueOperation({
-          type: 'updateNode',
-          nodeId: remarkData.nodeId,
-          updates: { hasRemarks: true }
-        });
-      }
-
-      console.log('📱 Remark queued for offline sync');
-      return true;
-      
-    } catch (error) {
-      console.error('❌ Failed to save remark offline:', error);
-      return false;
-    }
-  };
+  // Offline remark save functionality removed
 
   // Start editing a remark
   const startEditRemark = (remark) => {
@@ -611,19 +481,9 @@ const ControlView = () => {
           : remark
       ));
 
-      // Queue for later sync
-      offlineManager.queueOperation({
-        type: 'updateRemark',
-        remarkId: updatedRemarkData.id,
-        updates: {
-          text: updatedRemarkData.text,
-          priority: updatedRemarkData.priority,
-          images: updatedRemarkData.images
-        }
-      });
-
-      console.log('📱 Remark update queued for offline sync');
-      return true;
+      console.error('❌ Failed to update remark');
+      alert('Kunde inte uppdatera anmärkning. Kontrollera internetanslutning.');
+      return false;
       
     } catch (error) {
       console.error('❌ Failed to update remark offline:', error);
@@ -718,16 +578,8 @@ const ControlView = () => {
         console.log('✅ Node deleted online successfully');
       } else {
         // Offline deletion - queue operations
-        for (const nId of allNodesToDelete) {
-          offlineManager.queueOperation({
-            type: 'deleteNode',
-            nodeId: nId
-          });
-        }
-        
-        if (!isOnline) {
-          // Remove individual offline alerts
-        }
+        console.error('❌ Failed to delete nodes');
+        alert('Kunde inte ta bort noder. Kontrollera internetanslutning.');
       }
 
       // Update local UI immediately
@@ -779,26 +631,8 @@ const ControlView = () => {
         
         console.log('✅ Remark deleted online successfully');
       } else {
-        // Offline deletion
-        offlineManager.queueOperation({
-          type: 'deleteRemark',
-          remarkId
-        });
-        
-        // Also queue node update if this was the last remark
-        const remainingRemarks = remarks.filter(r => r.id !== remarkId);
-        if (remainingRemarks.length === 0 && currentNode.hasRemarks) {
-          offlineManager.queueOperation({
-            type: 'updateNode',
-            nodeId: currentNode.id,
-            updates: { hasRemarks: false }
-          });
-          
-          setCurrentNode(prev => ({ ...prev, hasRemarks: false }));
-          setNodes(prev => prev.map(node => 
-            node.id === currentNode.id ? { ...node, hasRemarks: false } : node
-          ));
-        }
+        console.error('❌ Failed to delete remark');
+        alert('Kunde inte ta bort anmärkning. Kontrollera internetanslutning.');
         
         // Remove individual offline alerts
       }
@@ -1582,55 +1416,71 @@ const ControlView = () => {
                   gap: '16px'
                 }}>
                   {editingNodeId === currentNode.id ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                    <div style={{ 
+                      width: '100%',
+                      maxWidth: '100%',
+                      display: windowWidth <= 768 ? 'block' : 'flex',
+                      gap: '8px'
+                    }}>
                       <input
                         type="text"
                         value={editingNodeName}
                         onChange={(e) => setEditingNodeName(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && handleEditNodeName(currentNode.id)}
                         style={{
-                          fontSize: '20px',
+                          fontSize: windowWidth <= 768 ? '16px' : '20px',
                           fontWeight: 'bold',
                           color: '#1f2937',
                           border: '2px solid #0066cc',
                           borderRadius: '6px',
                           padding: '8px 12px',
-                          flex: 1
+                          width: windowWidth <= 768 ? '100%' : 'auto',
+                          flex: windowWidth <= 768 ? 'none' : 1,
+                          marginBottom: windowWidth <= 768 ? '8px' : '0',
+                          boxSizing: 'border-box'
                         }}
                         autoFocus
                       />
-                      <button
-                        onClick={() => handleEditNodeName(currentNode.id)}
-                        disabled={saving || !editingNodeName.trim()}
-                        style={{
-                          padding: '8px 12px',
-                          background: '#10b981',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Spara
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingNodeId(null);
-                          setEditingNodeName('');
-                        }}
-                        style={{
-                          padding: '8px 12px',
-                          background: '#6b7280',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Avbryt
-                      </button>
+                      <div style={{
+                        display: 'flex',
+                        gap: '8px',
+                        justifyContent: windowWidth <= 768 ? 'flex-end' : 'flex-start'
+                      }}>
+                        <button
+                          onClick={() => handleEditNodeName(currentNode.id)}
+                          disabled={saving || !editingNodeName.trim()}
+                          style={{
+                            padding: '8px 12px',
+                            background: '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Spara
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingNodeId(null);
+                            setEditingNodeName('');
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            background: '#6b7280',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Avbryt
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <h2 
@@ -2435,12 +2285,7 @@ const ControlView = () => {
         currentIndex={modalImageIndex}
       />
 
-      {/* Notification System */}
-      <NotificationSystem
-        isOnline={isOnline}
-        syncProgress={syncProgress}
-        pendingOperations={pendingOperations}
-      />
+      {/* Notification system removed with offline functionality */}
     </div>
   );
 };

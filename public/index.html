@@ -53,10 +53,7 @@
               navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data.type === 'SYNC_OFFLINE_DATA') {
                   console.log('🔄 PWA: Received sync request from Service Worker');
-                  // Trigga offline manager sync om det finns
-                  if (window.offlineManager) {
-                    window.offlineManager.processPendingOperations();
-                  }
+                  // Offline manager removed
                 }
               });
               
@@ -279,6 +276,39 @@
         body {
           -webkit-text-size-adjust: 100%;
           -webkit-overflow-scrolling: touch;
+          font-size: 16px; /* Prevent zoom on input focus */
+        }
+        
+        /* Prevent inputs from zooming on mobile */
+        input, textarea, select {
+          font-size: 16px !important;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* Ensure buttons are touch-friendly */
+        button {
+          min-height: 44px;
+          min-width: 44px;
+          padding: 12px;
+          box-sizing: border-box;
+        }
+        
+        /* Fix for cards and containers */
+        .mobile-container {
+          padding: 12px !important;
+          margin: 8px !important;
+        }
+        
+        /* Responsive text sizes */
+        h1 { font-size: 24px !important; }
+        h2 { font-size: 20px !important; }
+        h3 { font-size: 18px !important; }
+        
+        /* Touch-friendly spacing */
+        .mobile-spacing {
+          gap: 12px !important;
+          margin-bottom: 16px !important;
         }
       }
       
