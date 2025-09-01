@@ -41,12 +41,12 @@ const MainLayout = () => {
       )
     },
     {
-      path: '/templates',
-      label: 'Mallar',
+      path: '/kontrollpunkter',
+      label: 'Kontrollpunkter',
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14,2 14,8 20,8"/>
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.73 0 3.35.49 4.73 1.34"/>
         </svg>
       )
     }
@@ -280,7 +280,7 @@ const MainLayout = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  {userProfile?.subscription?.plan === 'professional' ? 'Professional' : 'Gratis'}
+                  Gratis
                 </div>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -476,7 +476,7 @@ const MainLayout = () => {
                     color: 'var(--color-text-muted)', 
                     fontSize: 'var(--font-size-xs)'
                   }}>
-                    {userProfile?.subscription?.plan === 'professional' ? 'Professional Plan' : 'Gratis Plan'}
+                    Gratis Plan
                   </div>
                 </div>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

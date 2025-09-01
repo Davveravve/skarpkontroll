@@ -1,4 +1,4 @@
-// src/App.js - Fixad routing
+// src/App.js - Minimal version med endast befintliga filer
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -9,20 +9,22 @@ import Dashboard from './pages/Dashboard';
 import CustomerList from './pages/CustomerList';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerForm from './pages/CustomerForm';
-import AddressList from './pages/AddressList';
-import AddressDetail from './pages/AddressDetail';
-import InstallationList from './pages/InstallationList';
-import InstallationDetail from './pages/InstallationDetail';
-import AddressForm from './pages/AddressForm';
-import InstallationForm from './pages/InstallationForm';
-import TemplateList from './pages/TemplateList';
-import TemplateBuilder from './pages/TemplateBuilder';
-import TemplateDetail from './pages/TemplateDetail';
-import InspectionForm from './pages/InspectionForm';
-import InspectionDetail from './pages/InspectionDetail';
-import ImageUploadTest from './pages/ImageUploadTest';
-import SupabaseTest from './pages/SupabaseTest';
-import SubscriptionManager from './components/subscription/SubscriptionManager';
+
+// NYA KONTROLL-KOMPONENTER
+import ControlForm from './pages/ControlForm';
+import ControlView from './pages/ControlView';
+import Kontrollpunkter from './pages/Kontrollpunkter';
+
+// GAMLA KOMPONENTER (endast de som finns)
+// import InspectionForm from './pages/InspectionForm';
+// import InspectionDetail from './pages/InspectionDetail';
+
+// ANDRA SIDOR (kommenterade tills de behövs)
+// import TemplateList from './pages/TemplateList';
+// import TemplateBuilder from './pages/TemplateBuilder';
+// import TemplateDetail from './pages/TemplateDetail';
+// import ImageUploadTest from './pages/ImageUploadTest';
+// import SupabaseTest from './pages/SupabaseTest';
 import ProfilePage from './pages/ProfilePage';
 import './App.css';
 
@@ -70,50 +72,41 @@ function AppContent() {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
           
-          {/* Profil - LÄGG TILL DENNA */}
+          {/* Profil */}
           <Route path="profile" element={<ProfilePage />} />
           
-          {/* Kunder */}
+          {/* Kunder - ENDAST DE SOM FINNS */}
           <Route path="customers" element={<CustomerList />} />
           <Route path="customers/new" element={<CustomerForm />} />
           <Route path="customers/:customerId" element={<CustomerDetail />} />
           <Route path="customers/:customerId/edit" element={<CustomerForm />} />
           
-          {/* Adresser */}
-          <Route path="customers/:customerId/addresses" element={<AddressList />} />
+          {/* Kontrollpunkter */}
+          <Route path="kontrollpunkter" element={<Kontrollpunkter />} />
+          
+          {/* 🆕 NYA KONTROLLER - FÖRENKLAD STRUKTUR */}
+          <Route path="customers/:customerId/controls/new" element={<ControlForm />} />
+          <Route path="controls/:controlId" element={<ControlView />} />
+          
+          {/* 🗑️ GAMLA KONTROLLER - Kommenterade tills vi har filerna
           <Route path="customers/:customerId/addresses/new" element={<AddressForm />} />
           <Route path="customers/:customerId/addresses/:addressId" element={<AddressDetail />} />
-          <Route path="customers/:customerId/addresses/:addressId/edit" element={<AddressForm />} />
-          
-          {/* Anläggningar */}
-          <Route path="customers/:customerId/addresses/:addressId/installations" element={<InstallationList />} />
           <Route path="customers/:customerId/addresses/:addressId/installations/new" element={<InstallationForm />} />
           <Route path="customers/:customerId/addresses/:addressId/installations/:installationId" element={<InstallationDetail />} />
-          <Route path="customers/:customerId/addresses/:addressId/installations/:installationId/edit" element={<InstallationForm />} />
-          
-          {/* KONTROLLER - DETTA ÄR VIKTIGT! */}
           <Route path="customers/:customerId/addresses/:addressId/installations/:installationId/inspections/new" element={<InspectionForm />} />
           <Route path="customers/:customerId/addresses/:addressId/installations/:installationId/inspections/:inspectionId" element={<InspectionDetail />} />
+          */}
           
-          {/* Mallar */}
+          {/* ANDRA SIDOR - Kommenterade tills de behövs
           <Route path="templates" element={<TemplateList />} />
           <Route path="templates/new" element={<TemplateBuilder />} />
           <Route path="templates/:templateId" element={<TemplateDetail />} />
-          <Route path="templates/:templateId/edit" element={<TemplateBuilder />} />
-          
-          {/* Andra sidor */}
-          <Route path="subscription" element={<SubscriptionManager />} />
-          
-          {/* Enklare kontroll-rutter (för snabblänkar) */}
-          <Route path="inspections/new" element={<InspectionForm />} />
-          <Route path="inspections/:inspectionId" element={<InspectionDetail />} />
-          
-          {/* Test-sidor */}
           <Route path="test/images" element={<ImageUploadTest />} />
           <Route path="test/supabase" element={<SupabaseTest />} />
+          */}
         </Route>
         
-        {/* VIKTIGT: Fallback för okända rutter KAN INTE komma före specifika rutter */}
+        {/* Fallback för okända rutter */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ConfirmationProvider>

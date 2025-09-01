@@ -395,7 +395,7 @@ export const generateInspectionPDF = async (inspection, installation, customer, 
     doc.setTextColor(100);
     
     const footerText = userProfile.companyName ? 
-      `Genererad av ${userProfile.companyName} - ${new Date().toLocaleDateString('sv-SE')}` :
+      `${userProfile.companyName} - ${new Date().toLocaleDateString('sv-SE')}` :
       `Kontrollrapport genererad ${new Date().toLocaleDateString('sv-SE')}`;
     
     doc.text(footerText, pageWidth / 2, yPosition, { align: 'center' });

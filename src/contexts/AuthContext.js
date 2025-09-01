@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js - Komplett användarhantering med lösenordsåterställning
+// src/contexts/AuthContext.js - Simplified user management without subscriptions
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword, 
@@ -43,64 +43,47 @@ export const AuthProvider = ({ children }) => {
         if (profile.updatedAt?.seconds) {
           profile.updatedAt = new Date(profile.updatedAt.seconds * 1000);
         }
-        if (profile.subscription?.trialEnds?.seconds) {
-          profile.subscription.trialEnds = new Date(profile.subscription.trialEnds.seconds * 1000);
-        }
         
         setUserProfile(profile);
-        console.log('✅ AuthContext: User profile loaded', profile);
+        console.log('✅ AuthContext: User profile loaded');
         return profile;
       } else {
-        console.log('❌ AuthContext: No user profile found');
+        console.log('⚠️ AuthContext: No user profile found');
+        return null;
       }
     } catch (error) {
       console.error('❌ AuthContext: Error fetching user profile:', error);
+      return null;
     }
   };
 
   // Registrera ny användare
-  const register = async (email, password, companyName, contactPerson, phone = '') => {
+  const register = async (email, password, displayName, companyName, phone = '') => {
     try {
-      console.log('📝 AuthContext: Starting registration for', email);
+      console.log('🔐 AuthContext: Starting registration for', email);
       setAuthError(null);
       
-      // Skapa användare i Firebase Auth
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
-      console.log('✅ AuthContext: Firebase user created', user.uid);
+      console.log('✅ AuthContext: Firebase auth user created', user.uid);
       
-      // Uppdatera displayName
-      await updateProfile(user, {
-        displayName: contactPerson
-      });
-      console.log('✅ AuthContext: Display name updated');
+      // Uppdatera Firebase Auth profil
+      await updateProfile(user, { displayName: displayName });
       
-      // Skicka verifieringsemail
+      // Skicka verifiering e-post
       await sendEmailVerification(user);
-      console.log('✅ AuthContext: Verification email sent');
+      console.log('📧 AuthContext: Email verification sent');
       
       // Skapa användarprofil i Firestore
-      const trialEnds = new Date();
-      trialEnds.setDate(trialEnds.getDate() + 14); // 14 dagars gratis provperiod
-      
       const userProfileData = {
         uid: user.uid,
         email: user.email,
-        companyName,
-        contactPerson,
+        displayName: displayName || '',
+        companyName: companyName || '',
         phone: phone || '',
         emailVerified: user.emailVerified,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         lastLogin: serverTimestamp(),
-        subscription: {
-          type: 'trial',
-          status: 'active',
-          trialEnds: trialEnds,
-          customersLimit: 50,
-          templatesLimit: 20,
-          storageLimit: 1024 * 1024 * 1024, // 1GB
-          storageUsed: 0
-        },
         stats: {
           totalCustomers: 0,
           totalAddresses: 0,
@@ -141,8 +124,7 @@ export const AuthProvider = ({ children }) => {
         console.log('✅ AuthContext: Last login updated');
       }
       
-      console.log('🎉 AuthContext: Login complete, returning success');
-      return { success: true, user };
+      return { success: true };
     } catch (error) {
       console.error('❌ AuthContext: Login error:', error);
       setAuthError(error.message);
@@ -153,219 +135,101 @@ export const AuthProvider = ({ children }) => {
   // Logga ut
   const logout = async () => {
     try {
-      console.log('👋 AuthContext: Logging out...');
+      console.log('🔐 AuthContext: Logging out');
       await signOut(auth);
       setCurrentUser(null);
       setUserProfile(null);
-      setAuthError(null);
       console.log('✅ AuthContext: Logout successful');
       return { success: true };
     } catch (error) {
       console.error('❌ AuthContext: Logout error:', error);
+      setAuthError(error.message);
       return { success: false, error: error.message };
     }
   };
 
-  // Återställ lösenord
+  // Skicka lösenordsåterställning
   const resetPassword = async (email) => {
     try {
-      console.log('🔄 AuthContext: Sending password reset for', email);
-      setAuthError(null);
-      
+      console.log('🔐 AuthContext: Sending password reset to', email);
       await sendPasswordResetEmail(auth, email);
       console.log('✅ AuthContext: Password reset email sent');
-      
       return { success: true };
     } catch (error) {
       console.error('❌ AuthContext: Password reset error:', error);
-      setAuthError(error.message);
       return { success: false, error: getErrorMessage(error.code) };
     }
   };
 
-  // Uppdatera abonnemang
-  const updateSubscription = async (subscriptionData) => {
-    if (!currentUser) return { success: false, error: 'Inte inloggad' };
-    
+  // Uppdatera användarprofil
+  const updateUserProfile = async (profileData) => {
     try {
-      console.log('💳 AuthContext: Updating subscription for', currentUser.uid);
+      setLoading(true);
+      console.log('📝 AuthContext: Updating user profile...');
       
       await updateDoc(doc(db, 'users', currentUser.uid), {
-        subscription: subscriptionData,
+        ...profileData,
         updatedAt: serverTimestamp()
       });
       
-      await fetchUserProfile(currentUser.uid);
-      console.log('✅ AuthContext: Subscription updated');
+      // Uppdatera Firebase Auth displayName om det ingår
+      if (profileData.displayName) {
+        await updateProfile(currentUser, { displayName: profileData.displayName });
+      }
       
+      await fetchUserProfile(currentUser.uid);
+      setLoading(false);
+      console.log('✅ AuthContext: Profile updated');
       return { success: true };
     } catch (error) {
-      console.error('❌ AuthContext: Subscription update error:', error);
+      console.error('❌ AuthContext: Profile update error:', error);
+      setLoading(false);
       return { success: false, error: error.message };
     }
   };
 
-  // Applicera kampanjkod
-  const applyPromoCode = async (promoCode) => {
-    if (!currentUser || !userProfile) return { success: false, error: 'Inte inloggad' };
-    
-    try {
-      console.log('🎫 AuthContext: Applying promo code:', promoCode);
-      
-      // Här skulle du normalt validera kampanjkoden mot din backend
-      // För nu, hårdkoda några exempel
-      const validPromoCodes = {
-        'TRIAL30': { days: 30, type: 'trial_extension' },
-        'WELCOME50': { discount: 50, type: 'discount' }
-      };
-      
-      const promo = validPromoCodes[promoCode.toUpperCase()];
-      if (!promo) {
-        return { success: false, error: 'Ogiltig kampanjkod' };
-      }
-      
-      let updatedSubscription = { ...userProfile.subscription };
-      
-      if (promo.type === 'trial_extension') {
-        const currentEnd = userProfile.subscription.trialEnds || new Date();
-        const newEnd = new Date(currentEnd);
-        newEnd.setDate(newEnd.getDate() + promo.days);
-        updatedSubscription.trialEnds = newEnd;
-      }
-      
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        subscription: updatedSubscription,
-        appliedPromoCodes: [...(userProfile.appliedPromoCodes || []), promoCode],
-        updatedAt: serverTimestamp()
-      });
-      
-      await fetchUserProfile(currentUser.uid);
-      console.log('✅ AuthContext: Promo code applied');
-      
-      return { success: true, promo };
-    } catch (error) {
-      console.error('❌ AuthContext: Promo code error:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  // Kontrollera gränser
-  const checkLimits = async () => {
-    if (!userProfile) return { withinLimits: true, limits: {} };
-    
-    try {
-      const subscription = userProfile.subscription;
-      const stats = userProfile.stats;
-      
-      const limits = {
-        customers: {
-          used: stats?.totalCustomers || 0,
-          limit: subscription.customersLimit,
-          withinLimit: (stats?.totalCustomers || 0) < subscription.customersLimit
-        },
-        templates: {
-          used: stats?.totalTemplates || 0,
-          limit: subscription.templatesLimit,
-          withinLimit: (stats?.totalTemplates || 0) < subscription.templatesLimit
-        },
-        storage: {
-          used: subscription.storageUsed || 0,
-          limit: subscription.storageLimit,
-          withinLimit: (subscription.storageUsed || 0) < subscription.storageLimit
-        }
-      };
-      
-      const withinLimits = limits.customers.withinLimit && 
-                          limits.templates.withinLimit && 
-                          limits.storage.withinLimit;
-      
-      return { withinLimits, limits };
-    } catch (error) {
-      console.error('Error checking limits:', error);
-      return { withinLimits: true, limits: {} };
-    }
-  };
-
-  // Uppdatera användarstatistik
-  const updateUserStats = async (statType, increment = 1) => {
-    if (!currentUser || !userProfile) return;
-    
-    try {
-      const updatedStats = {
-        ...userProfile.stats,
-        [statType]: (userProfile.stats[statType] || 0) + increment
-      };
-      
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        stats: updatedStats,
-        updatedAt: serverTimestamp()
-      });
-      
-      setUserProfile(prev => ({
-        ...prev,
-        stats: updatedStats
-      }));
-    } catch (error) {
-      console.error('Error updating stats:', error);
-    }
-  };
-
-  // Hjälpfunktion för bättre felmeddelanden
+  // Felmeddelanden på svenska
   const getErrorMessage = (errorCode) => {
-    switch (errorCode) {
-      case 'auth/user-not-found':
-        return 'Ingen användare hittades med denna e-postadress';
-      case 'auth/wrong-password':
-        return 'Felaktigt lösenord';
-      case 'auth/email-already-in-use':
-        return 'En användare med denna e-postadress finns redan';
-      case 'auth/weak-password':
-        return 'Lösenordet är för svagt. Använd minst 6 tecken';
-      case 'auth/invalid-email':
-        return 'Ogiltig e-postadress';
-      case 'auth/too-many-requests':
-        return 'För många misslyckade inloggningsförsök. Försök igen senare';
-      case 'auth/network-request-failed':
-        return 'Nätverksfel. Kontrollera din internetanslutning';
-      case 'auth/invalid-credential':
-        return 'Felaktig e-post eller lösenord';
-      default:
-        return 'Ett oväntat fel uppstod. Försök igen';
-    }
+    const errorMessages = {
+      'auth/user-not-found': 'Användaren finns inte.',
+      'auth/wrong-password': 'Fel lösenord.',
+      'auth/email-already-in-use': 'E-postadressen används redan.',
+      'auth/weak-password': 'Lösenordet är för svagt.',
+      'auth/invalid-email': 'Ogiltig e-postadress.',
+      'auth/too-many-requests': 'För många försök. Försök igen senare.',
+      'auth/user-disabled': 'Kontot är inaktiverat.',
+      'auth/invalid-credential': 'Felaktiga inloggningsuppgifter.'
+    };
+    
+    return errorMessages[errorCode] || 'Ett oväntat fel uppstod.';
   };
 
-  // Lyssna på autentiseringsförändringar
+  // Lyssna på ändringar i autentisering
   useEffect(() => {
-    console.log('🔍 AuthContext: Setting up auth state listener');
+    console.log('🔄 AuthContext: Setting up auth state listener');
     
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('🔄 AuthContext: Auth state changed:', user ? user.email : 'No user');
+      console.log('🔄 AuthContext: Auth state changed', {
+        hasUser: !!user,
+        userUid: user?.uid,
+        userEmail: user?.email
+      });
       
       setCurrentUser(user);
       
       if (user) {
-        console.log('👤 AuthContext: User found, fetching profile...');
-        
-        // Uppdatera emailVerified status om det har ändrats
-        if (user.emailVerified && userProfile && !userProfile.emailVerified) {
-          await updateDoc(doc(db, 'users', user.uid), {
-            emailVerified: true,
-            updatedAt: serverTimestamp()
-          });
-        }
-        
+        // Användare inloggad - hämta profil
         await fetchUserProfile(user.uid);
       } else {
-        console.log('❌ AuthContext: No user, clearing profile');
+        // Användare utloggad
         setUserProfile(null);
       }
       
       setLoading(false);
-      console.log('✅ AuthContext: Auth state update complete');
     });
 
     return () => {
-      console.log('🧹 AuthContext: Cleaning up auth listener');
+      console.log('🔄 AuthContext: Cleaning up auth state listener');
       unsubscribe();
     };
   }, []);
@@ -379,12 +243,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     resetPassword,
-    updateSubscription,
-    applyPromoCode,
-    checkLimits,
-    updateUserStats,
-    fetchUserProfile,
-    setAuthError
+    updateUserProfile,
+    fetchUserProfile
   };
 
   return (

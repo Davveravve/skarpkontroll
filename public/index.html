@@ -1,30 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
+    <link rel="icon" href="%PUBLIC_URL%/logga.png" />
+    <link rel="shortcut icon" href="%PUBLIC_URL%/logga.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#0066cc" />
+    <meta name="description" content="Skarp Kontroll - Professionellt kontrollsystem för elbesiktningar och säkerhetsinspektion" />
+    
+    <!-- PWA Meta Tags -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logga.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>React App</title>
+    
+    <!-- iOS Safari PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Skarp Kontroll" />
+    
+    <!-- Android PWA Support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Skarp Kontroll" />
+    
+    <!-- Windows PWA Support -->
+    <meta name="msapplication-TileColor" content="#0066cc" />
+    <meta name="msapplication-TileImage" content="%PUBLIC_URL%/logga.png" />
+    
+    <title>Skarp Kontroll</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -39,5 +40,284 @@
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('✅ PWA: Service Worker registered successfully', registration.scope);
+              
+              // Lyssna på meddelanden från service worker
+              navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data.type === 'SYNC_OFFLINE_DATA') {
+                  console.log('🔄 PWA: Received sync request from Service Worker');
+                  // Trigga offline manager sync om det finns
+                  if (window.offlineManager) {
+                    window.offlineManager.processPendingOperations();
+                  }
+                }
+              });
+              
+            })
+            .catch((error) => {
+              console.log('❌ PWA: Service Worker registration failed', error);
+            });
+        });
+        
+        // Hantera service worker updates
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          console.log('🔄 PWA: Service Worker updated, reloading...');
+          window.location.reload();
+        });
+      }
+      
+      // PWA Install Prompt
+      let deferredPrompt;
+      let isInstallPromptShown = false;
+      
+      // Debug PWA installation
+      console.log('🔍 PWA: Script loaded, waiting for beforeinstallprompt...');
+      
+      // Visa popup för demonstration efter 8 sekunder även utan PWA-krav
+      setTimeout(() => {
+        if (!isInstallPromptShown && !deferredPrompt) {
+          console.log('🎭 PWA: Showing demo popup (real PWA needs HTTPS + manifest)');
+          // Skapa en demo deferredPrompt med userChoice
+          deferredPrompt = { 
+            prompt: () => {
+              console.log('🎭 Demo: Would show browser install dialog');
+              return Promise.resolve();
+            },
+            userChoice: Promise.resolve({ outcome: 'accepted' })
+          };
+          showInstallPrompt();
+        }
+      }, 8000);
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('📱 PWA: Install prompt triggered');
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Visa egen install-knapp efter 3 sekunder
+        if (!isInstallPromptShown) {
+          setTimeout(() => {
+            showInstallPrompt();
+          }, 3000);
+        }
+      });
+      
+      function showInstallPrompt() {
+        if (!deferredPrompt || isInstallPromptShown) return;
+        
+        isInstallPromptShown = true;
+        
+        // Skapa egen install banner
+        const installBanner = document.createElement('div');
+        installBanner.innerHTML = `
+          <div id="install-card" style="
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+            color: white;
+            padding: 20px 28px;
+            border-radius: 16px;
+            box-shadow: 
+              0 8px 25px rgba(0,102,204,0.3),
+              0 2px 8px rgba(0,0,0,0.15);
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 380px;
+            text-align: center;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            animation: subtle-pulse 3s ease-in-out infinite;
+          ">
+            <div style="
+              margin-bottom: 16px;
+              font-size: 18px;
+              font-weight: 700;
+              letter-spacing: -0.02em;
+            ">
+              Installera Skarp Kontroll
+            </div>
+            <div style="
+              font-size: 15px; 
+              margin-bottom: 20px; 
+              opacity: 0.95;
+              line-height: 1.4;
+              font-weight: 400;
+            ">
+              Få snabbare åtkomst och använd appen offline
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+              <button onclick="installPWA()" style="
+                background: white;
+                color: #0066cc;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              " 
+              onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
+              onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">
+                Installera nu
+              </button>
+              <button onclick="dismissInstallPrompt()" style="
+                background: rgba(255,255,255,0.15);
+                color: white;
+                border: 1px solid rgba(255,255,255,0.25);
+                padding: 12px 20px;
+                border-radius: 10px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: all 0.2s ease;
+                backdrop-filter: blur(5px);
+              "
+              onmouseover="this.style.background='rgba(255,255,255,0.25)'"
+              onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                Senare
+              </button>
+            </div>
+          </div>
+        `;
+        installBanner.id = 'pwa-install-banner';
+        document.body.appendChild(installBanner);
+        
+        // Animera in kortet efter DOM-inlägg
+        setTimeout(() => {
+          const card = document.getElementById('install-card');
+          if (card) {
+            card.style.opacity = '1';
+            card.style.transform = 'translateX(-50%) translateY(0px)';
+          }
+        }, 100);
+      }
+      
+      function installPWA() {
+        if (!deferredPrompt) return;
+        
+        // Kolla om det är en riktig eller fake prompt
+        if (typeof deferredPrompt.prompt === 'function') {
+          deferredPrompt.prompt();
+          
+          // Säker kontroll av userChoice
+          if (deferredPrompt.userChoice) {
+            deferredPrompt.userChoice.then((choiceResult) => {
+              if (choiceResult.outcome === 'accepted') {
+                console.log('✅ PWA: User accepted install prompt');
+                
+                // Visa demo-meddelande för test
+                if (window.location.protocol === 'http:') {
+                  alert('🎭 Demo-läge: I production (HTTPS) skulle appen installeras nu!\n\nFör riktig installation behövs:\n• HTTPS (inte http://)\n• Giltig Service Worker\n• Manifest.json');
+                }
+              } else {
+                console.log('❌ PWA: User dismissed install prompt');
+              }
+              deferredPrompt = null;
+              dismissInstallPrompt();
+            });
+          } else {
+            // Fallback för äldre browsers eller fake prompts
+            console.log('⚠️ PWA: userChoice not available, closing prompt');
+            dismissInstallPrompt();
+          }
+        } else {
+          // Fake prompt för testing
+          console.log('🧪 PWA: Fake install triggered (testing mode)');
+          alert('Detta är test-läge. I riktig PWA skulle appen installeras här!');
+          dismissInstallPrompt();
+        }
+      }
+      
+      function dismissInstallPrompt() {
+        const banner = document.getElementById('pwa-install-banner');
+        const card = document.getElementById('install-card');
+        
+        if (card) {
+          // Animera ut kortet
+          card.style.opacity = '0';
+          card.style.transform = 'translateX(-50%) translateY(100px) scale(0.95)';
+          
+          // Ta bort efter animation
+          setTimeout(() => {
+            if (banner) {
+              banner.remove();
+            }
+          }, 400);
+        } else if (banner) {
+          banner.remove();
+        }
+      }
+      
+      // Track app launch
+      window.addEventListener('appinstalled', () => {
+        console.log('🎉 PWA: App was installed successfully');
+        dismissInstallPrompt();
+      });
+      
+    </script>
+    
+    <!-- PWA Install Card Animations -->
+    <style>
+      @keyframes subtle-pulse {
+        0%, 100% {
+          box-shadow: 
+            0 8px 25px rgba(0,102,204,0.3),
+            0 2px 8px rgba(0,0,0,0.15);
+        }
+        50% {
+          box-shadow: 
+            0 12px 35px rgba(0,102,204,0.4),
+            0 4px 16px rgba(0,0,0,0.2);
+        }
+      }
+      
+      @keyframes slide-up-fade-in {
+        0% {
+          opacity: 0;
+          transform: translateX(-50%) translateY(100px) scale(0.9);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0px) scale(1);
+        }
+      }
+      
+      /* Responsiv design för mindre skärmar */
+      @media (max-width: 420px) {
+        #install-card {
+          max-width: calc(100vw - 40px) !important;
+          padding: 18px 20px !important;
+          bottom: 16px !important;
+        }
+      }
+      
+      /* Högt kontrast-läge support */
+      @media (prefers-contrast: high) {
+        #install-card {
+          border: 2px solid rgba(255,255,255,0.8) !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+        }
+      }
+      
+      /* Reduced motion för tillgänglighet */
+      @media (prefers-reduced-motion: reduce) {
+        #install-card {
+          animation: none !important;
+          transition: opacity 0.2s ease !important;
+        }
+      }
+    </style>
   </body>
 </html>

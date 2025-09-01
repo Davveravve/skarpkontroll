@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 const Dashboard = () => {
   const { currentUser, userProfile } = useAuth();
   const [recentInspections, setRecentInspections] = useState([]);
+  const [hasCustomers, setHasCustomers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
@@ -28,16 +29,26 @@ const Dashboard = () => {
       try {
         console.log('📊 Loading dashboard data for user:', currentUser.email);
 
-        const inspectionsSnapshot = await getDocs(
-          query(collection(db, 'inspections'), where('userId', '==', currentUser.uid))
+        // Check if user has any customers first
+        const customersSnapshot = await getDocs(
+          query(collection(db, 'customers'), where('userId', '==', currentUser.uid))
         );
 
-        const inspections = inspectionsSnapshot.docs.map(doc => ({
+        // Set hasCustomers for conditional rendering
+        const hasCustomersResult = customersSnapshot.docs.length > 0;
+        setHasCustomers(hasCustomersResult);
+        
+        // Fetch recent controls (new structure)
+        const controlsSnapshot = await getDocs(
+          query(collection(db, 'controls'), where('userId', '==', currentUser.uid))
+        );
+
+        const controls = controlsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
 
-        const sortedInspections = inspections
+        const sortedControls = controls
           .sort((a, b) => {
             const aDate = a.createdAt?.seconds || 0;
             const bDate = b.createdAt?.seconds || 0;
@@ -45,7 +56,11 @@ const Dashboard = () => {
           })
           .slice(0, 5);
 
-        setRecentInspections(sortedInspections);
+        setRecentInspections(sortedControls);
+        
+        // Store hasCustomers in component state if needed
+        // You might want to add this as a state variable
+        
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -89,7 +104,7 @@ const Dashboard = () => {
     );
   }
 
-  const userName = currentUser?.email?.split('@')[0] || 'Användare';
+  const userName = userProfile?.companyName || currentUser?.email?.split('@')[0] || 'Användare';
 
   return (
     <div style={{ 
@@ -208,7 +223,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {windowWidth > 768 && (
+          {windowWidth > 768 && !hasCustomers && (
             <div style={{
               background: 'var(--color-primary-alpha)',
               borderRadius: 'var(--radius-lg)',
@@ -357,7 +372,7 @@ const Dashboard = () => {
         <div style={{ 
           padding: windowWidth > 1024 ? '0 32px 32px 32px' : '0 16px 24px 16px' 
         }}>
-          {recentInspections.length === 0 ? (
+          {recentInspections.length === 0 && !hasCustomers ? (
             <div style={{
               textAlign: 'center',
               padding: 'var(--space-2xl)'
@@ -423,6 +438,72 @@ const Dashboard = () => {
                 Lägg till första kunden
               </Link>
             </div>
+          ) : recentInspections.length === 0 && hasCustomers ? (
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--space-2xl)'
+            }}>
+              <div style={{
+                width: '80px',
+                height: '80px',
+                background: 'var(--color-gray-100)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto var(--space-lg) auto'
+              }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5">
+                  <path d="M9 12l2 2 4-4"/>
+                  <path d="M21 12c.552 0 1-.448 1-1V8a2 2 0 0 0-2-2h-1V4a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v3c0 .552.448 1 1 1h1v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2h1z"/>
+                </svg>
+              </div>
+              <h3 style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--font-weight-semibold)',
+                color: 'var(--color-text-primary)',
+                marginBottom: 'var(--space-sm)',
+                margin: '0 0 var(--space-sm) 0'
+              }}>
+                Inga kontroller ännu
+              </h3>
+              <p style={{
+                fontSize: 'var(--font-size-base)',
+                color: 'var(--color-text-muted)',
+                marginBottom: 'var(--space-xl)',
+                margin: '0 0 var(--space-xl) 0'
+              }}>
+                Skapa din första kontroll för en befintlig kund
+              </p>
+              <Link 
+                to="/customers"
+                style={{
+                  display: 'inline-block',
+                  padding: 'var(--space-md) var(--space-xl)',
+                  background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 'var(--radius-lg)',
+                  fontSize: 'var(--font-size-base)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  textDecoration: 'none',
+                  transition: 'all var(--transition-normal)',
+                  boxShadow: '0 4px 6px rgba(0, 102, 204, 0.25)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, var(--color-primary-dark) 0%, #003a7a 100%)';
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 8px 15px rgba(0, 102, 204, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)';
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 6px rgba(0, 102, 204, 0.25)';
+                }}
+              >
+                Välj kund och skapa kontroll
+              </Link>
+            </div>
           ) : (
             <div style={{ 
               display: 'flex', 
@@ -432,7 +513,7 @@ const Dashboard = () => {
               {recentInspections.map((inspection, index) => (
                 <Link
                   key={inspection.id}
-                  to={`/customers/${inspection.customerId}/addresses/${inspection.addressId}/installations/${inspection.installationId}/inspections/${inspection.id}`}
+                  to={`/controls/${inspection.id}`}
                   style={{
                     display: 'block',
                     padding: windowWidth > 1024 ? '24px' : '16px',

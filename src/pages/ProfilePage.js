@@ -214,29 +214,6 @@ const ProfilePage = () => {
     }
   };
 
-  const getSubscriptionStatus = () => {
-    if (!userProfile?.subscription) return { text: 'Okänd', color: '#6b7280' };
-    
-    const sub = userProfile.subscription;
-    
-    if (sub.type === 'trial') {
-      const trialEnds = new Date(sub.trialEnds?.seconds * 1000 || sub.trialEnds);
-      const daysLeft = Math.ceil((trialEnds - new Date()) / (1000 * 60 * 60 * 24));
-      
-      if (daysLeft > 0) {
-        return { 
-          text: `Provperiod (${daysLeft} dagar kvar)`, 
-          color: '#f59e0b' 
-        };
-      } else {
-        return { text: 'Provperiod utgången', color: '#ef4444' };
-      }
-    }
-    
-    return { text: 'Aktivt abonnemang', color: '#10b981' };
-  };
-
-  const subscriptionStatus = getSubscriptionStatus();
 
   if (loading) {
     return (
@@ -373,7 +350,7 @@ const ProfilePage = () => {
               color: '#374151',
               marginBottom: '4px'
             }}>
-              Abonnemangsstatus
+              Status
             </label>
             <div style={{
               padding: '12px',
@@ -381,10 +358,10 @@ const ProfilePage = () => {
               border: '1px solid #e5e7eb',
               borderRadius: '8px',
               fontSize: '14px',
-              color: subscriptionStatus.color,
+              color: '#10b981',
               fontWeight: '500'
             }}>
-              {subscriptionStatus.text}
+              Gratis version
             </div>
           </div>
         </div>
