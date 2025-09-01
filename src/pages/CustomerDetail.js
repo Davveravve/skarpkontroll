@@ -165,32 +165,30 @@ const CustomerDetail = () => {
     });
   };
 
-  const handleDeleteControl = async (controlId, controlName) => {
-    const confirmed = await confirmation.confirm({
+  const handleDeleteControl = (controlId, controlName) => {
+    confirmation.confirm({
       title: 'Radera kontroll',
       message: `Är du säker på att du vill radera kontrollen "${controlName}"? Detta kommer också att radera alla noder och anmärkningar som tillhör kontrollen.`,
       confirmText: 'Radera',
       cancelText: 'Avbryt',
-      type: 'danger'
+      onConfirm: async () => {
+        setUpdating(true);
+        try {
+          // Ta bort kontrollen från Firestore
+          await deleteDoc(doc(db, 'controls', controlId));
+          
+          // Uppdatera local state
+          setControls(prev => prev.filter(c => c.id !== controlId));
+          
+          console.log('✅ Control deleted successfully');
+        } catch (err) {
+          console.error('Error deleting control:', err);
+          alert('Kunde inte radera kontrollen');
+        } finally {
+          setUpdating(false);
+        }
+      }
     });
-
-    if (!confirmed) return;
-
-    setUpdating(true);
-    try {
-      // Ta bort kontrollen från Firestore
-      await deleteDoc(doc(db, 'controls', controlId));
-      
-      // Uppdatera local state
-      setControls(prev => prev.filter(c => c.id !== controlId));
-      
-      console.log('✅ Control deleted successfully');
-    } catch (err) {
-      console.error('Error deleting control:', err);
-      alert('Kunde inte radera kontrollen');
-    } finally {
-      setUpdating(false);
-    }
   };
 
   if (loading) {
@@ -625,23 +623,26 @@ const CustomerDetail = () => {
                     : 'linear-gradient(90deg, #f59e0b, #d97706)'
                 }} />
                 
+                {/* Title row without status - leave space for delete button */}
                 <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'flex-start',
-                  marginBottom: '16px'
+                  marginBottom: '8px',
+                  paddingRight: '100px' // Leave space for delete button
                 }}>
                   <h3 style={{
                     color: '#1f2937',
                     margin: 0,
                     fontSize: '18px',
                     fontWeight: '600',
-                    lineHeight: '1.3',
-                    flex: 1
+                    lineHeight: '1.3'
                   }}>
                     {control.name}
                   </h3>
-                  
+                </div>
+                
+                {/* Status badge on separate line */}
+                <div style={{
+                  marginBottom: '12px'
+                }}>
                   <span style={{
                     padding: '6px 12px',
                     background: control.status === 'completed' 
@@ -652,8 +653,7 @@ const CustomerDetail = () => {
                     fontSize: '12px',
                     fontWeight: '600',
                     textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginLeft: '12px'
+                    letterSpacing: '0.5px'
                   }}>
                     {control.status === 'completed' ? 'Slutförd' : 'Aktiv'}
                   </span>
