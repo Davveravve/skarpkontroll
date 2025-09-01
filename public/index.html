@@ -80,37 +80,17 @@
       // Debug PWA installation
       console.log('🔍 PWA: Script loaded, waiting for beforeinstallprompt...');
       
-      // Visa popup för demonstration efter 8 sekunder även utan PWA-krav
-      setTimeout(() => {
-        if (!isInstallPromptShown && !deferredPrompt) {
-          console.log('🎭 PWA: Showing demo popup (real PWA needs HTTPS + manifest)');
-          // Skapa en demo deferredPrompt med userChoice
-          deferredPrompt = { 
-            prompt: () => {
-              console.log('🎭 Demo: Would show browser install dialog');
-              return Promise.resolve();
-            },
-            userChoice: Promise.resolve({ outcome: 'accepted' })
-          };
-          showInstallPrompt();
-        }
-      }, 8000);
+      // PWA install prompt disabled
       
       window.addEventListener('beforeinstallprompt', (e) => {
-        console.log('📱 PWA: Install prompt triggered');
+        console.log('📱 PWA: Install prompt triggered but disabled');
         e.preventDefault();
-        deferredPrompt = e;
-        
-        // Visa egen install-knapp efter 3 sekunder
-        if (!isInstallPromptShown) {
-          setTimeout(() => {
-            showInstallPrompt();
-          }, 3000);
-        }
+        // Do not show install prompt
       });
       
       function showInstallPrompt() {
-        if (!deferredPrompt || isInstallPromptShown) return;
+        // Install prompt disabled
+        return;
         
         isInstallPromptShown = true;
         
