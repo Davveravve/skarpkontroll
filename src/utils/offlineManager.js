@@ -24,7 +24,35 @@ export class OfflineManager {
   }
 
   // Spara operation för senare sync
+  // Rensa skadade eller gamla operationer
+  cleanupOperations() {
+    const before = this.pendingOperations.length;
+    this.pendingOperations = this.pendingOperations.filter(op => {
+      // Ta bort operationer utan type eller data
+      if (!op || !op.type) {
+        console.warn('🗑️ Removing invalid operation:', op);
+        return false;
+      }
+      
+      // Ta bort operationer äldre än 7 dagar
+      if (op.timestamp && Date.now() - op.timestamp > 7 * 24 * 60 * 60 * 1000) {
+        console.warn('🗑️ Removing old operation:', op.type, new Date(op.timestamp));
+        return false;
+      }
+      
+      return true;
+    });
+    
+    if (before !== this.pendingOperations.length) {
+      localStorage.setItem('pendingOperations', JSON.stringify(this.pendingOperations));
+      console.log(`🧹 Cleaned up ${before - this.pendingOperations.length} operations`);
+    }
+  }
+
   queueOperation(operation) {
+    // Rensa först
+    this.cleanupOperations();
+    
     // Förhindra dubbletter baserat på operation type + specifika data
     let operationKey;
     
@@ -72,10 +100,14 @@ export class OfflineManager {
   async processPendingOperations() {
     if (!this.isOnline || this.pendingOperations.length === 0 || this.syncInProgress) return;
     
+    // Cleanup först
+    this.cleanupOperations();
+    
     this.syncInProgress = true;
     this.syncProgress = { completed: 0, total: this.pendingOperations.length };
     
     console.log('🔄 Processing', this.pendingOperations.length, 'pending operations');
+    console.log('Operations breakdown:', this.pendingOperations.map(op => `${op.type}${op.id ? ` (${op.id})` : ''}`));
     
     // Visa notification
     if (window.showNotification) {
@@ -109,10 +141,18 @@ export class OfflineManager {
         }
         
       } catch (error) {
-        console.error('❌ Failed to sync operation:', error.message, op.type, op.id);
+        console.error('❌ Failed to sync operation:', error.message, 'Type:', op.type, 'Data:', op);
         
         // Klassificera fel för bättre hantering
         const isRetryable = this.isRetryableError(error);
+        
+        // Skip obviously broken operations (invalid data)
+        if (error.message.includes('Invalid operation') || error.message.includes('missing type')) {
+          console.warn('🗑️ Skipping invalid operation:', op);
+          this.syncProgress.completed++; // Count as completed to not get stuck
+          this.notifyProgress();
+          continue;
+        }
         
         if (isRetryable && (op.retryCount || 0) < 3) {
           const retryOp = { ...op, retryCount: (op.retryCount || 0) + 1 };

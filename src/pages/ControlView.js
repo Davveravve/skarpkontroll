@@ -1885,7 +1885,9 @@ const ControlView = () => {
                               display: 'grid',
                               gridTemplateColumns: windowWidth <= 768 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
                               gap: '8px',
-                              marginTop: '12px'
+                              marginTop: '12px',
+                              width: '100%',
+                              overflow: 'hidden'
                             }}>
                               {remark.images.map((image, imageIndex) => (
                                 <div key={imageIndex} style={{ position: 'relative' }}>
@@ -1894,10 +1896,12 @@ const ControlView = () => {
                                     alt={image.originalName || 'Uppladdad bild'}
                                     style={{
                                       width: '100%',
+                                      maxWidth: '100%',
                                       height: '80px',
                                       objectFit: 'cover',
                                       borderRadius: '6px',
-                                      cursor: 'pointer'
+                                      cursor: 'pointer',
+                                      display: 'block'
                                     }}
                                     onClick={() => openImageModal(image, remark.images, imageIndex)}
                                     title={`Klicka för att öppna ${image.originalName || 'bild'} i full storlek`}
@@ -2141,8 +2145,10 @@ const ControlView = () => {
                   </h4>
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-                    gap: '8px'
+                    gridTemplateColumns: windowWidth <= 768 ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)',
+                    gap: '8px',
+                    width: '100%',
+                    overflow: 'hidden'
                   }}>
                     {remarkImages.map((image, index) => (
                       <div key={index} style={{ position: 'relative' }}>
@@ -2151,9 +2157,11 @@ const ControlView = () => {
                           alt={image.originalName}
                           style={{
                             width: '100%',
+                            maxWidth: '100%',
                             height: '60px',
                             objectFit: 'cover',
-                            borderRadius: '4px'
+                            borderRadius: '4px',
+                            display: 'block'
                           }}
                         />
                         <button
@@ -2346,9 +2354,11 @@ const ControlView = () => {
                           alt={image.originalName}
                           style={{
                             width: '100%',
+                            maxWidth: '100%',
                             height: '60px',
                             objectFit: 'cover',
-                            borderRadius: '4px'
+                            borderRadius: '4px',
+                            display: 'block'
                           }}
                         />
                         <button
