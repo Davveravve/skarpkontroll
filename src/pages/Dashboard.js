@@ -144,10 +144,10 @@ const Dashboard = () => {
       <header className="dashboard-header">
         <div className="dashboard-header-content">
           <h1 className="dashboard-title">
-            Valkommen, {userName}
+            Välkommen, {userName}
           </h1>
           <p className="dashboard-subtitle">
-            Har ar en oversikt av ditt kontrollsystem
+            Här är en översikt av ditt kontrollsystem
           </p>
         </div>
         <div className="dashboard-header-actions">

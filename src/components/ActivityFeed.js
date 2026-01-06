@@ -271,8 +271,8 @@ const ActivityFeed = ({ maxItems = 10, showHeader = true }) => {
           <div className="empty-icon">
             {Icons.control}
           </div>
-          <p>Ingen aktivitet annu</p>
-          <span>Aktivitet fran teamet visas har</span>
+          <p>Ingen aktivitet ännu</p>
+          <span>Aktivitet från teamet visas här</span>
         </div>
       </div>
     );
