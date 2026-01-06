@@ -168,20 +168,38 @@ export const TeamProvider = ({ children }) => {
         // Hämta medlemsinfo
         if (team.members && team.members.length > 0) {
           const memberPromises = team.members.map(async (memberId) => {
-            const memberDoc = await getDoc(doc(db, 'users', memberId));
-            if (memberDoc.exists()) {
-              const data = memberDoc.data();
+            try {
+              const memberDoc = await getDoc(doc(db, 'users', memberId));
+              if (memberDoc.exists()) {
+                const data = memberDoc.data();
+                return {
+                  id: memberId,
+                  displayName: data.name || data.contactPerson || data.displayName || data.companyName || data.email || 'Okänd',
+                  email: data.email || '',
+                  companyName: data.companyName || ''
+                };
+              } else {
+                // Användardokument saknas - returnera minst ID:t
+                console.log('TeamContext: User document not found for', memberId);
+                return {
+                  id: memberId,
+                  displayName: 'Medlem',
+                  email: '',
+                  companyName: ''
+                };
+              }
+            } catch (err) {
+              console.error('TeamContext: Error fetching member', memberId, err);
               return {
                 id: memberId,
-                displayName: data.contactPerson || data.displayName || data.companyName || 'Okand',
-                email: data.email || '',
-                companyName: data.companyName || ''
+                displayName: 'Medlem',
+                email: '',
+                companyName: ''
               };
             }
-            return null;
           });
 
-          const members = (await Promise.all(memberPromises)).filter(Boolean);
+          const members = await Promise.all(memberPromises);
           setTeamMembers(members);
           saveToCache(CACHE_KEYS.TEAM_MEMBERS, members);
         }
