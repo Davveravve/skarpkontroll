@@ -9,8 +9,7 @@ const RegisterPage = () => {
     password: '',
     confirmPassword: '',
     companyName: '',
-    contactPerson: '',
-    phone: '',
+    name: '',
     agreeToTerms: false
   });
   const [loading, setLoading] = useState(false);
@@ -55,8 +54,8 @@ const RegisterPage = () => {
       return false;
     }
     
-    if (!formData.contactPerson.trim()) {
-      setError('Kontaktperson krävs');
+    if (!formData.name.trim()) {
+      setError('Namn krävs');
       return false;
     }
     
@@ -80,8 +79,7 @@ const RegisterPage = () => {
     try {
       const result = await register(formData.email, formData.password, {
         companyName: formData.companyName,
-        contactPerson: formData.contactPerson,
-        phone: formData.phone
+        name: formData.name
       });
       
       if (result.success) {
@@ -92,8 +90,7 @@ const RegisterPage = () => {
           password: '',
           confirmPassword: '',
           companyName: '',
-          contactPerson: '',
-          phone: '',
+          name: '',
           agreeToTerms: false
         });
       } else {
@@ -166,28 +163,15 @@ const RegisterPage = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="contactPerson">Kontaktperson *</label>
+              <label htmlFor="name">Namn *</label>
               <input
                 type="text"
-                id="contactPerson"
-                name="contactPerson"
-                value={formData.contactPerson}
+                id="name"
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
                 placeholder="För- och efternamn"
                 required
-                disabled={loading}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="phone">Telefonnummer</label>
-              <input
-                type="tel"
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="070-123 45 67"
                 disabled={loading}
               />
             </div>
@@ -302,37 +286,6 @@ const RegisterPage = () => {
                 Logga in här
               </Link>
             </p>
-          </div>
-
-          {/* Features */}
-          <div className="register-features">
-            <h3>Vad ingår i den gratis nivån?</h3>
-            <div className="features-list">
-              <div className="feature-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20,6 9,17 4,12"/>
-                </svg>
-                <span>1 kund</span>
-              </div>
-              <div className="feature-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20,6 9,17 4,12"/>
-                </svg>
-                <span>1 anläggning</span>
-              </div>
-              <div className="feature-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20,6 9,17 4,12"/>
-                </svg>
-                <span>1 kontroll</span>
-              </div>
-              <div className="feature-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20,6 9,17 4,12"/>
-                </svg>
-                <span>PDF-export inkluderat</span>
-              </div>
-            </div>
           </div>
         </div>
       </div>

@@ -456,13 +456,9 @@ export const generateControlPDF = async (control, places, allRemarks, userProfil
   const tree = buildTree(places);
   const filteredTree = filterEmptyNodes(tree, remarksByPlace);
 
-  // Sidoheader för innehållssidor
+  // Sidoheader för innehållssidor - borttagen enligt önskemål
   const addContentHeader = () => {
-    doc.setFontSize(9);
-    doc.setTextColor(...colors.mediumGray);
-    doc.text('BESIKTNINGSPROTOKOLL', margin, margin);
-    doc.text(control?.name || '', pageWidth - margin, margin, { align: 'right' });
-    drawLine(margin + 3, margin, contentWidth, 0.3);
+    // Ingen header - mer plats för innehåll
   };
 
   addContentHeader();
