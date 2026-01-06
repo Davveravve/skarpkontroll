@@ -1,0 +1,446 @@
+/* src/components/layout/Sidebar.css - Premium sidebar styling */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 260px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.06);
+}
+
+.sidebar--collapsed {
+  width: 80px;
+}
+
+/* Logo Section */
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A855F7 100%);
+  color: white;
+  min-height: 80px;
+}
+
+.sidebar-logo-icon {
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.sidebar-logo-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-logo-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+.sidebar-logo-subtitle {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Team indicator */
+.sidebar-team {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sidebar-team-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+  border-radius: 10px;
+  border: 1px solid #C7D2FE;
+}
+
+.sidebar-team-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6366F1;
+}
+
+.sidebar-team-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4338CA;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-team-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.sidebar-team-logo img {
+  max-width: 100%;
+  max-height: 50px;
+  object-fit: contain;
+}
+
+/* Navigation */
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 12px;
+  overflow-y: auto;
+}
+
+.sidebar-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #6366F1 0%, #8B5CF6 100%);
+  border-radius: 0 3px 3px 0;
+  transform: scaleY(0);
+  transition: transform 0.2s ease;
+}
+
+.sidebar-nav-item:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.sidebar-nav-item--active {
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+  color: #6366F1;
+  font-weight: 600;
+}
+
+.sidebar-nav-item--active::before {
+  transform: scaleY(1);
+}
+
+.sidebar-nav-item--active .sidebar-nav-icon {
+  color: #6366F1;
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  transition: transform 0.2s ease;
+}
+
+.sidebar-nav-item:hover .sidebar-nav-icon {
+  transform: scale(1.1);
+}
+
+.sidebar-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-nav-indicator {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  background: #6366F1;
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.2s ease;
+}
+
+.sidebar-nav-item--active .sidebar-nav-indicator {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Bottom section */
+.sidebar-bottom {
+  padding: 16px 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+/* User profile */
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.sidebar-user--collapsed {
+  justify-content: center;
+  padding: 12px 8px;
+}
+
+.sidebar-user-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.sidebar-user-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-email {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Logout button */
+.sidebar-logout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-logout:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.sidebar-logout:hover .sidebar-nav-icon {
+  color: #dc2626;
+}
+
+/* Collapse toggle */
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px;
+  margin-top: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 8px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-collapse-btn:hover {
+  background: #EEF2FF;
+  color: #6366F1;
+  border-color: #6366F1;
+}
+
+/* Mobile toggle button */
+.sidebar-mobile-toggle {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 150;
+  width: 48px;
+  height: 48px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  color: #334155;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.sidebar-mobile-toggle:hover {
+  background: #f1f5f9;
+  transform: scale(1.05);
+}
+
+/* Mobile overlay */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 90;
+}
+
+/* Collapsed state adjustments */
+.sidebar--collapsed .sidebar-logo {
+  justify-content: center;
+  padding: 24px 12px;
+}
+
+.sidebar--collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 14px;
+}
+
+.sidebar--collapsed .sidebar-logout {
+  justify-content: center;
+}
+
+.sidebar--collapsed .sidebar-team,
+.sidebar--collapsed .sidebar-logo-text,
+.sidebar--collapsed .sidebar-nav-label,
+.sidebar--collapsed .sidebar-user-info,
+.sidebar--collapsed .sidebar-logout .sidebar-nav-label {
+  display: none;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-mobile-toggle {
+    display: flex;
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  .sidebar-collapse-btn {
+    display: none;
+  }
+}
+
+/* Animation for nav items */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sidebar-nav-item {
+  animation: slideIn 0.3s ease forwards;
+}
+
+.sidebar-nav-list li:nth-child(1) .sidebar-nav-item { animation-delay: 0.05s; }
+.sidebar-nav-list li:nth-child(2) .sidebar-nav-item { animation-delay: 0.1s; }
+.sidebar-nav-list li:nth-child(3) .sidebar-nav-item { animation-delay: 0.15s; }
+.sidebar-nav-list li:nth-child(4) .sidebar-nav-item { animation-delay: 0.2s; }
+.sidebar-nav-list li:nth-child(5) .sidebar-nav-item { animation-delay: 0.25s; }
+
+/* Scrollbar styling */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

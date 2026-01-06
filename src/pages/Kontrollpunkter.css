@@ -1,0 +1,474 @@
+/* src/pages/Kontrollpunkter.css - Clean checkpoints styling matching Dashboard */
+
+.kontrollpunkter {
+  max-width: 800px;
+  margin: 0 auto;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading */
+.kontrollpunkter-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: #6b7280;
+  font-size: 16px;
+}
+
+.kontrollpunkter-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #6366F1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Header */
+.kontrollpunkter-header {
+  margin-bottom: 32px;
+}
+
+.kontrollpunkter-header-content {
+  flex: 1;
+}
+
+.kontrollpunkter-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.kontrollpunkter-subtitle {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Card */
+.kontrollpunkter-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.kontrollpunkter-card-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f3f4f6;
+  background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
+}
+
+.kontrollpunkter-card-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.kontrollpunkter-card-header p {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.kontrollpunkter-card-body {
+  padding: 24px;
+}
+
+.kontrollpunkter-card-body--flush {
+  padding: 0;
+}
+
+/* Textarea */
+.kontrollpunkter-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #111827;
+  font-family: inherit;
+  min-height: 100px;
+  resize: vertical;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+}
+
+.kontrollpunkter-textarea:focus {
+  outline: none;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.kontrollpunkter-textarea::placeholder {
+  color: #9ca3af;
+}
+
+/* Input */
+.kontrollpunkter-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #111827;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.kontrollpunkter-input:focus {
+  outline: none;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.kontrollpunkter-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Add Form */
+.kontrollpunkter-add-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .kontrollpunkter-add-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Buttons */
+.kontrollpunkter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  white-space: nowrap;
+}
+
+.kontrollpunkter-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kontrollpunkter-btn--primary {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.kontrollpunkter-btn--primary:not(:disabled):hover {
+  background: linear-gradient(135deg, #4F46E5 0%, #1d4ed8 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.kontrollpunkter-btn--success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.kontrollpunkter-btn--success:not(:disabled):hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-2px);
+}
+
+.kontrollpunkter-btn--secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.kontrollpunkter-btn--secondary:not(:disabled):hover {
+  background: #e5e7eb;
+}
+
+.kontrollpunkter-btn--small {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+/* Empty State */
+.kontrollpunkter-empty {
+  text-align: center;
+  padding: 64px 32px;
+}
+
+.kontrollpunkter-empty-icon {
+  width: 80px;
+  height: 80px;
+  background: #f3f4f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  color: #9ca3af;
+}
+
+.kontrollpunkter-empty h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.kontrollpunkter-empty p {
+  font-size: 15px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* List */
+.kontrollpunkter-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Item */
+.kontrollpunkter-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f3f4f6;
+  animation: slideInLeft 0.3s ease forwards;
+  opacity: 0;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.kontrollpunkter-item:last-child {
+  border-bottom: none;
+}
+
+.kontrollpunkter-item-number {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1d4ed8;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.kontrollpunkter-item-text {
+  flex: 1;
+  font-size: 15px;
+  color: #111827;
+  line-height: 1.5;
+}
+
+.kontrollpunkter-item-edit {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .kontrollpunkter-item-edit {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kontrollpunkter-item-edit .kontrollpunkter-btn {
+    width: 100%;
+  }
+}
+
+.kontrollpunkter-item-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Action Buttons */
+.kontrollpunkter-action-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+.kontrollpunkter-action-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.kontrollpunkter-action-btn--danger {
+  color: #dc2626;
+}
+
+.kontrollpunkter-action-btn--danger:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* Notice */
+.kontrollpunkter-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d4ed8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .kontrollpunkter-title {
+    font-size: 26px;
+  }
+
+  .kontrollpunkter-card-header,
+  .kontrollpunkter-card-body {
+    padding: 20px;
+  }
+
+  .kontrollpunkter-item {
+    padding: 14px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .kontrollpunkter-title {
+    font-size: 22px;
+  }
+
+  .kontrollpunkter-item {
+    flex-wrap: wrap;
+  }
+
+  .kontrollpunkter-item-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+}
+
+/* Drag and Drop */
+.kontrollpunkter-drag-handle {
+  width: 24px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  cursor: grab;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+  margin-left: -8px;
+}
+
+.kontrollpunkter-drag-handle:hover {
+  color: #6b7280;
+}
+
+.kontrollpunkter-drag-handle:active {
+  cursor: grabbing;
+}
+
+.kontrollpunkter-item[draggable="true"] {
+  cursor: default;
+  transition: all 0.2s ease;
+}
+
+.kontrollpunkter-item.dragging {
+  opacity: 0.5;
+  background: #f3f4f6;
+  transform: scale(0.98);
+}
+
+.kontrollpunkter-item.drag-over {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-top: 2px solid #6366F1;
+  margin-top: -1px;
+}
+
+.kontrollpunkter-item.drag-over .kontrollpunkter-item-number {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  color: white;
+}
+
+/* Drag hint */
+.kontrollpunkter-drag-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.kontrollpunkter-drag-hint svg {
+  color: #9ca3af;
+}
+
+@media (max-width: 480px) {
+  .kontrollpunkter-drag-handle {
+    display: none;
+  }
+}

@@ -1,0 +1,864 @@
+/* ControlView.css - Modern, Eye-friendly Design */
+
+/* ========================================
+   BASE - Soft background
+   ======================================== */
+.control-view {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 40px 100px;
+  background: transparent;
+}
+
+@media (max-width: 768px) {
+  .control-view {
+    padding: 24px 20px 80px;
+  }
+}
+
+/* ========================================
+   HEADER CARD - Clean & Simple
+   ======================================== */
+.cv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 24px 32px;
+  margin-bottom: 32px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.cv-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.cv-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+  cursor: pointer;
+}
+
+.cv-title:hover {
+  color: #4a5568;
+}
+
+@media (max-width: 768px) {
+  .cv-title {
+    font-size: 22px;
+  }
+}
+
+.cv-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ========================================
+   STATUS BADGES
+   ======================================== */
+.cv-status-badge {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cv-status-badge--active {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cv-status-badge--completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* ========================================
+   BUTTONS
+   ======================================== */
+.cv-btn {
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  border: none;
+  transition: all 0.2s;
+}
+
+.cv-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cv-btn--primary {
+  background: #4a5568;
+  color: #fff;
+}
+
+.cv-btn--primary:hover:not(:disabled) {
+  background: #718096;
+}
+
+.cv-btn--success {
+  background: #065f46;
+  color: #fff;
+}
+
+.cv-btn--success:hover:not(:disabled) {
+  background: #047857;
+}
+
+.cv-btn--secondary {
+  background: rgba(255,255,255,0.9);
+  color: #4a5568;
+  border: 1px solid #e2e8f0;
+}
+
+.cv-btn--secondary:hover:not(:disabled) {
+  background: #fff;
+  border-color: #cbd5e0;
+}
+
+.cv-btn--danger {
+  background: transparent;
+  color: #e53e3e;
+  border: 1px solid #feb2b2;
+}
+
+.cv-btn--danger:hover:not(:disabled) {
+  background: #fff5f5;
+}
+
+.cv-btn--ghost {
+  background: #f7fafc;
+  color: #4a5568;
+  padding: 8px 14px;
+}
+
+.cv-btn--ghost:hover:not(:disabled) {
+  background: #edf2f7;
+}
+
+.cv-btn--sm {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+/* ========================================
+   CARDS - Blend with background
+   ======================================== */
+.cv-card {
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.8);
+}
+
+.cv-card-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cv-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2d3748;
+  margin: 0;
+}
+
+.cv-card-body {
+  padding: 24px;
+}
+
+.cv-card-footer {
+  padding: 20px 24px;
+  background: rgba(0,0,0,0.02);
+  border-top: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  gap: 12px;
+}
+
+/* ========================================
+   SIDEBAR - Subtle
+   ======================================== */
+.cv-sidebar {
+  background: rgba(255,255,255,0.5);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.8);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.cv-sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 16px 0;
+}
+
+/* ========================================
+   TREE NAVIGATION
+   ======================================== */
+.cv-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  color: #4a5568;
+  margin-bottom: 4px;
+  transition: all 0.15s;
+}
+
+.cv-tree-item:hover {
+  background: #f7fafc;
+  color: #1a202c;
+}
+
+.cv-tree-item--active {
+  background: #4a5568;
+  color: #fff;
+  font-weight: 600;
+}
+
+.cv-tree-item--active:hover {
+  background: #718096;
+}
+
+.cv-tree-toggle {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a0aec0;
+}
+
+.cv-tree-item--active .cv-tree-toggle {
+  color: rgba(255,255,255,0.8);
+}
+
+/* ========================================
+   MAIN CONTENT
+   ======================================== */
+.cv-content {
+  display: block;
+}
+
+.cv-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ========================================
+   NODE CARD
+   ======================================== */
+.cv-node-card {
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.8);
+  padding: 32px;
+}
+
+.cv-node-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 8px 0;
+}
+
+.cv-node-path {
+  font-size: 14px;
+  color: #718096;
+  margin: 0;
+}
+
+/* ========================================
+   SUBNODES
+   ======================================== */
+.cv-subnodes {
+  margin-top: 32px;
+}
+
+.cv-subnodes-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 16px 0;
+}
+
+.cv-subnode-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(0,0,0,0.05);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cv-subnode-item:hover {
+  background: rgba(255,255,255,0.8);
+  border-color: #cbd5e0;
+  transform: translateX(4px);
+}
+
+.cv-subnode-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.cv-subnode-arrow {
+  color: #a0aec0;
+  font-size: 18px;
+}
+
+/* ========================================
+   REMARKS
+   ======================================== */
+.cv-remarks {
+  margin-top: 32px;
+}
+
+.cv-remarks-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 16px 0;
+}
+
+/* ========================================
+   REMARK CARDS
+   ======================================== */
+.cv-remark-card {
+  background: rgba(255,255,255,0.7);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(0,0,0,0.05);
+  position: relative;
+  transition: all 0.15s;
+}
+
+.cv-remark-card:hover {
+  background: rgba(255,255,255,0.9);
+}
+
+.cv-remark-card--priority-A {
+  border-left: 4px solid #e53e3e;
+}
+
+.cv-remark-card--priority-B {
+  border-left: 4px solid #ed8936;
+}
+
+.cv-remark-card--priority-C {
+  border-left: 4px solid #38a169;
+}
+
+.cv-remark-header {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cv-remark-priority {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cv-remark-priority--A {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+.cv-remark-priority--B {
+  background: #feebc8;
+  color: #c05621;
+}
+
+.cv-remark-priority--C {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.cv-remark-date {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.cv-remark-text {
+  font-size: 16px;
+  color: #2d3748;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.cv-remark-images {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.cv-remark-image {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.cv-remark-image:hover {
+  transform: scale(1.05);
+}
+
+.cv-remark-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cv-remark-card:hover .cv-remark-actions {
+  opacity: 1;
+}
+
+/* ========================================
+   FORMS
+   ======================================== */
+.cv-form-group {
+  margin-bottom: 20px;
+}
+
+.cv-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 8px;
+}
+
+.cv-input {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 16px;
+  color: #1a202c;
+  background: rgba(255,255,255,0.8);
+  box-sizing: border-box;
+  transition: all 0.15s;
+}
+
+.cv-input:focus {
+  outline: none;
+  border-color: #4a5568;
+  background: #fff;
+}
+
+.cv-input::placeholder {
+  color: #a0aec0;
+}
+
+.cv-textarea {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 16px;
+  color: #1a202c;
+  background: rgba(255,255,255,0.8);
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 120px;
+  font-family: inherit;
+  line-height: 1.5;
+  transition: all 0.15s;
+}
+
+.cv-textarea:focus {
+  outline: none;
+  border-color: #4a5568;
+  background: #fff;
+}
+
+/* ========================================
+   PRIORITY SELECTOR
+   ======================================== */
+.cv-priority-selector {
+  display: flex;
+  gap: 12px;
+}
+
+.cv-priority-option {
+  flex: 1;
+  padding: 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.6);
+  cursor: pointer;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.cv-priority-option:hover {
+  border-color: #cbd5e0;
+}
+
+.cv-priority-option--selected {
+  border-width: 2px;
+}
+
+.cv-priority-option--A {
+  color: #c53030;
+}
+
+.cv-priority-option--A.cv-priority-option--selected {
+  border-color: #e53e3e;
+  background: #fff5f5;
+}
+
+.cv-priority-option--B {
+  color: #c05621;
+}
+
+.cv-priority-option--B.cv-priority-option--selected {
+  border-color: #ed8936;
+  background: #fffaf0;
+}
+
+.cv-priority-option--C {
+  color: #276749;
+}
+
+.cv-priority-option--C.cv-priority-option--selected {
+  border-color: #38a169;
+  background: #f0fff4;
+}
+
+/* ========================================
+   EMPTY STATE
+   ======================================== */
+.cv-empty {
+  text-align: center;
+  padding: 60px 32px;
+}
+
+.cv-empty-icon {
+  width: 64px;
+  height: 64px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  color: #718096;
+}
+
+.cv-empty-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.cv-empty-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 12px 0;
+}
+
+.cv-empty-text {
+  font-size: 16px;
+  color: #718096;
+  margin: 0 0 28px 0;
+  line-height: 1.6;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ========================================
+   MODALS
+   ======================================== */
+.cv-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 32, 44, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.cv-modal {
+  background: #fff;
+  border-radius: 20px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.cv-modal-header {
+  padding: 24px 24px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.cv-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.cv-modal-close {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: #f7fafc;
+  border-radius: 10px;
+  color: #718096;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.15s;
+}
+
+.cv-modal-close:hover {
+  background: #edf2f7;
+  color: #1a202c;
+}
+
+.cv-modal-body {
+  padding: 24px;
+}
+
+.cv-modal-footer {
+  padding: 20px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ========================================
+   LOADING
+   ======================================== */
+.cv-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+  color: #718096;
+  font-size: 16px;
+}
+
+.cv-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #4a5568;
+  border-radius: 50%;
+  animation: cv-spin 0.7s linear infinite;
+}
+
+@keyframes cv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================
+   PDF MODAL
+   ======================================== */
+.cv-pdf-modal {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+  position: relative;
+}
+
+.cv-pdf-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: #f7fafc;
+  border-radius: 10px;
+  color: #718096;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cv-pdf-close:hover {
+  background: #edf2f7;
+}
+
+.cv-pdf-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+}
+
+.cv-pdf-icon--loading {
+  border: 4px solid #e2e8f0;
+  border-top-color: #4a5568;
+  animation: cv-spin 0.7s linear infinite;
+}
+
+.cv-pdf-icon--success {
+  background: #c6f6d5;
+}
+
+.cv-pdf-icon--error {
+  background: #fed7d7;
+}
+
+.cv-pdf-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+  color: #1a202c;
+}
+
+.cv-pdf-title--success {
+  color: #276749;
+}
+
+.cv-pdf-title--error {
+  color: #c53030;
+}
+
+.cv-pdf-message {
+  font-size: 16px;
+  color: #718096;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.cv-pdf-progress {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.cv-pdf-progress-bar {
+  height: 100%;
+  background: #4a5568;
+  border-radius: 3px;
+}
+
+.cv-pdf-percent {
+  font-size: 14px;
+  color: #718096;
+  font-weight: 600;
+}
+
+/* ========================================
+   INLINE EDITING
+   ======================================== */
+.cv-inline-edit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cv-inline-input {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 16px;
+  flex: 1;
+  background: #fff;
+  outline: none;
+}
+
+.cv-inline-input:focus {
+  border-color: #4a5568;
+}
+
+.cv-inline-input::placeholder {
+  color: #a0aec0;
+}
+
+/* ========================================
+   ACTIONS ROW
+   ======================================== */
+.cv-actions-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}

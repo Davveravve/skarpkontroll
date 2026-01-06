@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start)",
+      "Bash(rm:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(del \"C:\\Users\\david\\Desktop\\Soeldokumentation\\dokument\\src\\components\\EmailModal.js\")",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(set CI=false)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

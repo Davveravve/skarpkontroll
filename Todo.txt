@@ -1,0 +1,36 @@
+1. Vill ta bort abonnemang. Inget av det ska finnas i framtididen. Hela sidan ska vara gratis
+
+2. Om man redan har en elller flera kunder så ska denna Kom igång nu
+Skapa din första kund och kontroll
+
+Lägg till kund försvinna från dashboarden.
+
+3. Fixa senaste kontroller på dashboarden så man ser senaste kontrollerna.
+
+4. Gå igenom och ta bort onödiga filer som inte behövs eller används.
+
+5. Ha ett textfält på sidan kontrollpunkter där man kan skriva i vad det ska stå innan kontrollpunkterna visas. T.e.x "Dessa punkter är vad vi går igenom under kontrollen"
+
+6. Ska gå att maila pdf direkt från hemsidan.
+
+7. Ta bort emojis från http://localhost:3000/customers/JwkWZDA9PZTCBmuoF5cC, samt ta bort emoji från exportera pdf på http://localhost:3000/controls/kJCDulfx4PysKXYLQa6H
+
+8. Ta bort undernodsnodknapp i controlview (genväg). Alltså i nodeinformationen ovan där anmärkningar visas. behövs inte ha navigeringsknapp där i då man har navigering i navigeringscardet.
+
+9. I pdf under kontrollpunkter där noder visas kanske göra en titel som "Kontrollpunkter" Fast "Anmärkningar"
+
+10. Skapa kontroller enkelt utan förplanering. Bygg strukturen med noder och anmärkningar medan du kontrollerar. denna text ska försvinna om det finns kontroller.
+
+11. Man ska kunna ändra kontroller från aktiv till klar.
+
+12. När man gör en ny kontroll behövs inte detta visas 📱 Så här fungerar det:
+Skapa kontrollen med ett namn
+Lägg till noder (rum, områden) medan du går runt
+Skapa anmärkningar med text och bilder direkt
+Ingen förplanering behövs - bygg strukturen dynamiskt!.
+
+13. http://localhost:3000/customers/JwkWZDA9PZTCBmuoF5cC på denna sidan vill jag även ha en informationsruta om kunden där det står namn på kontaktperson, mail och nummer
+
+14. ändra Välkommen tillbaka, davveravve! som använder mailadressen till företagsnamnet istället.
+
+15. Ta bort datum emojin på kontroller i kunden

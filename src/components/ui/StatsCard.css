@@ -1,0 +1,197 @@
+/* src/components/ui/StatsCard.css - Premium stats card styling */
+
+.stats-card {
+  position: relative;
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stats-card--clickable {
+  cursor: pointer;
+}
+
+.stats-card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.1),
+    0 6px 10px rgba(0, 0, 0, 0.08);
+  border-color: transparent;
+}
+
+/* Background decoration */
+.stats-card-bg-decoration {
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  opacity: 0.1;
+  transition: all 0.3s ease;
+}
+
+.stats-card:hover .stats-card-bg-decoration {
+  transform: scale(1.2);
+  opacity: 0.15;
+}
+
+/* Color variants */
+.stats-card--blue .stats-card-bg-decoration { background: #6366F1; }
+.stats-card--blue .stats-card-icon { background: linear-gradient(135deg, #6366F1 0%, #1d4ed8 100%); }
+.stats-card--blue:hover { border-color: #6366F1; }
+
+.stats-card--green .stats-card-bg-decoration { background: #10b981; }
+.stats-card--green .stats-card-icon { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.stats-card--green:hover { border-color: #10b981; }
+
+.stats-card--purple .stats-card-bg-decoration { background: #8b5cf6; }
+.stats-card--purple .stats-card-icon { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+.stats-card--purple:hover { border-color: #8b5cf6; }
+
+.stats-card--orange .stats-card-bg-decoration { background: #f59e0b; }
+.stats-card--orange .stats-card-icon { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+.stats-card--orange:hover { border-color: #f59e0b; }
+
+.stats-card--red .stats-card-bg-decoration { background: #ef4444; }
+.stats-card--red .stats-card-icon { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+.stats-card--red:hover { border-color: #ef4444; }
+
+/* Header */
+.stats-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.stats-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s ease;
+}
+
+.stats-card:hover .stats-card-icon {
+  transform: scale(1.1) rotate(5deg);
+}
+
+/* Trend indicator */
+.stats-card-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stats-card-trend--up {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.stats-card-trend--down {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.stats-card-trend--neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Body */
+.stats-card-body {
+  position: relative;
+  z-index: 1;
+}
+
+.stats-card-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1;
+  margin-bottom: 4px;
+  letter-spacing: -1px;
+}
+
+.stats-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.stats-card-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+/* Shine effect on hover */
+.stats-card-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+
+.stats-card:hover .stats-card-shine {
+  left: 100%;
+}
+
+/* Animation for numbers */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stats-card-value {
+  animation: countUp 0.5s ease forwards;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .stats-card {
+    padding: 20px;
+  }
+
+  .stats-card-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stats-card-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .stats-card-value {
+    font-size: 28px;
+  }
+}

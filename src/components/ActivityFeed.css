@@ -1,0 +1,252 @@
+/* src/components/ActivityFeed.css */
+
+.activity-feed {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.activity-feed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.activity-feed-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.activity-count {
+  font-size: 12px;
+  color: #6b7280;
+  background: #e5e7eb;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.activity-feed-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #6366F1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.activity-feed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.activity-feed-empty .empty-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  border-radius: 50%;
+  margin-bottom: 16px;
+  color: #9ca3af;
+}
+
+.activity-feed-empty .empty-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.activity-feed-empty p {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.activity-feed-empty span {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.activity-feed-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.activity-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background-color 0.15s ease;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-item:hover {
+  background-color: #f9fafb;
+}
+
+.activity-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: white;
+}
+
+.activity-icon.action-created {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.activity-icon.action-updated {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+}
+
+.activity-icon.action-deleted {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.activity-icon.action-exported {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.activity-icon.action-completed {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.activity-icon.action-joined {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.activity-icon.action-left {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.activity-icon.action-uploaded {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+}
+
+.activity-icon.action-default {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.activity-user {
+  font-weight: 600;
+  color: #111827;
+}
+
+.activity-action {
+  color: #6b7280;
+}
+
+.activity-entity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.entity-icon {
+  display: flex;
+  align-items: center;
+  color: #9ca3af;
+}
+
+.entity-name {
+  font-weight: 500;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.entity-parent {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.activity-details {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.activity-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .activity-item {
+    padding: 12px 16px;
+  }
+
+  .activity-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .activity-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .activity-time {
+    display: none;
+  }
+
+  .entity-name {
+    max-width: 150px;
+  }
+}

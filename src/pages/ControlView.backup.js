@@ -1,0 +1,2752 @@
+// src/pages/ControlView.js - Clean version utan dupliceringar
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp, orderBy, onSnapshot } from 'firebase/firestore';
+import { ref, deleteObject } from 'firebase/storage';
+import { db, storage } from '../services/firebase';
+import ControlImageUploader from '../components/ControlImageUploader';
+import ImageModal from '../components/ImageModal';
+import ImageAnnotation from '../components/ImageAnnotation';
+import { generateControlPDF } from '../utils/controlPdfGenerator';
+import { useAuth } from '../contexts/AuthContext';
+import { useTeam } from '../contexts/TeamContext';
+import { useToast } from '../components/ui/Toast';
+import { useConfirmation } from '../components/ConfirmationProvider';
+import { createTeamLogger } from '../services/teamLogger';
+
+const ControlView = () => {
+  const { currentUser, userProfile } = useAuth();
+  const { currentTeam, hasTeam } = useTeam();
+  const toast = useToast();
+  const confirmation = useConfirmation();
+  const { controlId } = useParams();
+
+  // State
+  const [control, setControl] = useState(null);
+  const [nodes, setNodes] = useState([]);
+  const [currentNode, setCurrentNode] = useState(null);
+  const [remarks, setRemarks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // Form states
+  const [showAddNode, setShowAddNode] = useState(false);
+  const [showAddRemark, setShowAddRemark] = useState(false);
+  const [editingNodeId, setEditingNodeId] = useState(null);
+  const [editingNodeName, setEditingNodeName] = useState('');
+  const [newNodeName, setNewNodeName] = useState('');
+  const [newRemarkText, setNewRemarkText] = useState('');
+  const [newRemarkPriority, setNewRemarkPriority] = useState('');
+  const [addAsChild, setAddAsChild] = useState(false);
+  
+  // Edit remark states
+  const [editingRemarkId, setEditingRemarkId] = useState(null);
+  const [editingRemarkText, setEditingRemarkText] = useState('');
+  const [editingRemarkPriority, setEditingRemarkPriority] = useState('');
+  const [editingRemarkImages, setEditingRemarkImages] = useState([]);
+  const [editingControlName, setEditingControlName] = useState(false);
+  const [newControlName, setNewControlName] = useState('');
+  const [remarkImages, setRemarkImages] = useState([]);
+  const [modalImage, setModalImage] = useState(null);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [allModalImages, setAllModalImages] = useState([]);
+  const [modalImageIndex, setModalImageIndex] = useState(0);
+  const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState({ percent: 0, message: '', error: null });
+
+  // PDF datum modal
+  const [showPdfDateModal, setShowPdfDateModal] = useState(false);
+  const [pdfDate, setPdfDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Publik länk
+  const [publicToken, setPublicToken] = useState(null);
+
+  // Annotation state
+  const [showAnnotation, setShowAnnotation] = useState(false);
+  const [annotationImage, setAnnotationImage] = useState(null);
+  const [annotationRemarkId, setAnnotationRemarkId] = useState(null);
+  const [annotationImageIndex, setAnnotationImageIndex] = useState(null);
+
+  // Team logger for activity tracking
+  const logger = useMemo(() => {
+    if (!currentTeam?.id || !currentUser?.uid) return null;
+    return createTeamLogger({
+      teamId: currentTeam.id,
+      userId: currentUser.uid,
+      userName: userProfile?.companyName || currentUser.email?.split('@')[0] || 'Anonym'
+    });
+  }, [currentTeam?.id, currentUser?.uid, currentUser?.email, userProfile?.companyName]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Network status tracking removed
+
+  // Load initial data med realtidslyssnare
+  useEffect(() => {
+    if (!currentUser || !controlId) {
+      console.error('ControlView: Missing currentUser or controlId');
+      setError('Saknar behörighet eller kontroll-ID');
+      setLoading(false);
+      return;
+    }
+
+    console.log('🔍 ControlView: Setting up realtime listeners');
+
+    // Realtidslyssnare för kontroll
+    const controlRef = doc(db, 'inspections', controlId);
+    const unsubscribeControl = onSnapshot(controlRef, (controlDoc) => {
+      if (!controlDoc.exists()) {
+        console.error('Control document not found');
+        setError('Kontrollen kunde inte hittas');
+        setLoading(false);
+        return;
+      }
+
+      const controlData = { id: controlDoc.id, ...controlDoc.data() };
+
+      // Kontrollera team-ägarskap
+      if (!hasTeam || controlData.teamId !== currentTeam?.id) {
+        console.error('User team does not match control team');
+        setError('Du har inte behörighet att se denna kontroll');
+        setLoading(false);
+        return;
+      }
+
+      setControl(controlData);
+      setPublicToken(controlData.publicToken || null);
+      console.log('Control updated:', controlData.name);
+    }, (err) => {
+      console.error('Error listening to control:', err);
+      setError(`Kunde inte ladda kontrolldata: ${err.message}`);
+      setLoading(false);
+    });
+
+    // Realtidslyssnare för platser
+    const placesQuery = query(
+      collection(db, 'places'),
+      where('inspectionId', '==', controlId)
+    );
+
+    let isFirstNodesLoad = true;
+    const unsubscribeNodes = onSnapshot(placesQuery, async (snapshot) => {
+      const nodesData = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+
+      // Sortera lokalt efter order eller createdAt
+      nodesData.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) {
+          return a.order - b.order;
+        }
+        const aTime = a.createdAt?.seconds || a.createdAt?.getTime?.() || 0;
+        const bTime = b.createdAt?.seconds || b.createdAt?.getTime?.() || 0;
+        return aTime - bTime;
+      });
+
+      console.log('📁 Places updated:', nodesData.length, 'places');
+      setNodes(nodesData);
+
+      // Vid första laddningen, sätt initial node
+      if (isFirstNodesLoad && nodesData.length > 0) {
+        const rootNode = nodesData.find(node => !node.parentId) || nodesData[0];
+        console.log('🌳 Setting root node:', rootNode.name);
+        setCurrentNode(rootNode);
+        isFirstNodesLoad = false;
+      }
+
+      setLoading(false);
+    }, (err) => {
+      console.error('Error listening to places:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      // Visa felet för användaren om det är ett index-problem
+      if (err.code === 'failed-precondition') {
+        setError('Firestore-index saknas. Kontakta administratören.');
+      }
+      setLoading(false);
+    });
+
+    // Cleanup
+    return () => {
+      unsubscribeControl();
+      unsubscribeNodes();
+    };
+  }, [controlId, currentUser, currentTeam, hasTeam]);
+
+  // Realtidslyssnare för remarks när currentNode ändras
+  useEffect(() => {
+    if (!currentNode?.id) {
+      setRemarks([]);
+      return;
+    }
+
+    console.log('Setting up remarks listener for node:', currentNode.id);
+
+    const remarksQuery = query(
+      collection(db, 'remarks'),
+      where('placeId', '==', currentNode.id)
+    );
+
+    const unsubscribe = onSnapshot(remarksQuery, (snapshot) => {
+      const remarksData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Sortera lokalt - nyaste först
+      remarksData.sort((a, b) => {
+        const aTime = a.createdAt?.seconds || a.createdAt?.getTime?.() || 0;
+        const bTime = b.createdAt?.seconds || b.createdAt?.getTime?.() || 0;
+        return bTime - aTime;
+      });
+
+      console.log('Remarks updated:', remarksData.length, 'for node', currentNode.name);
+      setRemarks(remarksData);
+    }, (err) => {
+      console.error('Error listening to remarks:', err);
+      setRemarks([]);
+    });
+
+    return () => unsubscribe();
+  }, [currentNode?.id]);
+
+  const loadRemarksForNode = async (nodeId) => {
+    // Denna funktion behålls för bakåtkompatibilitet men remarks laddas nu via useEffect ovan
+    console.log('loadRemarksForNode called for:', nodeId);
+  };
+
+  // Ny funktion för att hämta ALLA anmärkningar för PDF genom att gå igenom alla noder
+  const loadAllRemarksForControl = async (controlNodes) => {
+    console.log('Loading ALL remarks for all nodes in control');
+    
+    try {
+      // Skapa en array av alla node-ID:n
+      const nodeIds = controlNodes.map(node => node.id);
+      
+      // Hämta anmärkningar för alla noder parallellt
+      const remarkPromises = nodeIds.map(async (nodeId) => {
+        const remarksQuery = query(
+          collection(db, 'remarks'),
+          where('placeId', '==', nodeId)
+        );
+        
+        const remarksSnapshot = await getDocs(remarksQuery);
+        return remarksSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      });
+      
+      const remarksArrays = await Promise.all(remarkPromises);
+      const flatRemarks = remarksArrays.flat();
+      
+      console.log('Found', flatRemarks.length, 'total remarks for ALL nodes');
+      return flatRemarks;
+    } catch (err) {
+      console.error('Error loading all remarks:', err);
+      return [];
+    }
+  };
+
+  // Ny funktion för att hämta kontrollpunkter för PDF
+  const loadKontrollpunkter = async () => {
+    try {
+      console.log('Loading kontrollpunkter for PDF');
+      const q = query(
+        collection(db, 'kontrollpunkter'),
+        where('teamId', '==', currentTeam?.id)
+      );
+      
+      const snapshot = await getDocs(q);
+      const items = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Sortera lokalt efter order
+      items.sort((a, b) => (a.order || 0) - (b.order || 0));
+      
+      console.log('Found', items.length, 'kontrollpunkter');
+      return items;
+    } catch (error) {
+      console.error('Error loading kontrollpunkter:', error);
+      return [];
+    }
+  };
+
+  // Ny funktion för att hämta instruktionstext för PDF
+  const loadInstructionText = async () => {
+    try {
+      console.log('Loading instruction text for PDF');
+      const q = query(
+        collection(db, 'settings'),
+        where('teamId', '==', currentTeam?.id),
+        where('type', '==', 'kontrollpunkter_instruction')
+      );
+      
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        const text = doc.data().text || '';
+        console.log('Found instruction text:', text);
+        return text;
+      }
+      
+      console.log('No instruction text found');
+      return '';
+    } catch (error) {
+      console.error('Error loading instruction text:', error);
+      return '';
+    }
+  };
+
+  const handleAddNode = async (e, createAsChild = false) => {
+    e.preventDefault();
+    if (!newNodeName.trim()) return;
+
+    setSaving(true);
+    
+    const nodeData = {
+      name: newNodeName.trim(),
+      inspectionId: controlId,
+      teamId: currentTeam?.id,
+      parentId: createAsChild && currentNode ? currentNode.id : null,
+      order: nodes.filter(n => n.parentId === (createAsChild && currentNode ? currentNode.id : null)).length,
+      hasRemarks: false,
+      userId: currentUser.uid,
+      createdBy: currentUser.uid
+    };
+    
+    try {
+      // Always try online operations (offline mode removed)
+        // Try online save first
+        const newNode = {
+          ...nodeData,
+          createdAt: serverTimestamp()
+        };
+
+        const docRef = await addDoc(collection(db, 'places'), newNode);
+        const createdNode = { id: docRef.id, ...newNode, createdAt: new Date() };
+        
+        setNodes(prev => [...prev, createdNode]);
+        
+        // Update control with rootNodeId if this is first node
+        if (!currentNode && !control.rootNodeId) {
+          await updateDoc(doc(db, 'inspections', controlId), {
+            rootNodeId: docRef.id
+          });
+          setControl(prev => ({ ...prev, rootNodeId: docRef.id }));
+        }
+        
+        console.log('Node added online successfully');
+      
+    } catch (error) {
+      console.error('Failed to add node:', error);
+      toast.error('Kunde inte lägga till nod. Kontrollera internetanslutning och försök igen.');
+    } finally {
+      setNewNodeName('');
+      setShowAddNode(false);
+      setSaving(false);
+    }
+  };
+  
+  // Offline save functionality removed
+
+  const handleAddRemark = async (e) => {
+    e.preventDefault();
+    if (!newRemarkText.trim() || !currentNode) return;
+
+    setSaving(true);
+    
+    const remarkData = {
+      placeId: currentNode.id,
+      teamId: currentTeam?.id,
+      text: newRemarkText.trim(),
+      priority: newRemarkPriority,
+      images: remarkImages,
+      userId: currentUser.uid,
+      createdBy: currentUser.uid,
+      nodeHasRemarks: currentNode.hasRemarks
+    };
+
+    try {
+      // Always try online operations (offline mode removed)
+        // Try online save first
+        const newRemark = {
+          ...remarkData,
+          createdAt: serverTimestamp()
+        };
+        
+        delete newRemark.nodeHasRemarks; // Remove this field before saving to Firestore
+        
+        const docRef = await addDoc(collection(db, 'remarks'), newRemark);
+        
+        const createdRemark = { 
+          id: docRef.id, 
+          ...newRemark,
+          createdAt: new Date()
+        };
+        
+        setRemarks(prev => [createdRemark, ...prev]);
+
+        // Update node if it doesn't have remarks yet
+        if (!currentNode.hasRemarks) {
+          await updateDoc(doc(db, 'places', currentNode.id), {
+            hasRemarks: true
+          });
+          
+          setCurrentNode(prev => ({ ...prev, hasRemarks: true }));
+          setNodes(prev => prev.map(node => 
+            node.id === currentNode.id ? { ...node, hasRemarks: true } : node
+          ));
+        }
+
+        console.log('Remark saved online successfully');
+        
+        // Reset form on successful online save
+        setNewRemarkText('');
+        setNewRemarkPriority('');
+        setRemarkImages([]);
+        setShowAddRemark(false);
+        
+      
+    } catch (error) {
+      console.error('Failed to save remark:', error);
+      toast.error('Kunde inte spara anmärkning. Kontrollera internetanslutning och försök igen.');
+    } finally {
+      setSaving(false);
+    }
+  };
+  
+  // Offline remark save functionality removed
+
+  // Start editing a remark
+  const startEditRemark = (remark) => {
+    setEditingRemarkId(remark.id);
+    setEditingRemarkText(remark.text);
+    setEditingRemarkPriority(remark.priority || '');
+    setEditingRemarkImages(remark.images || []);
+    setShowAddRemark(false); // Close add form if open
+  };
+
+  // Cancel editing
+  const cancelEditRemark = () => {
+    setEditingRemarkId(null);
+    setEditingRemarkText('');
+    setEditingRemarkPriority('');
+    setEditingRemarkImages([]);
+  };
+
+  // Handle editing a remark
+  const handleEditRemark = async (e) => {
+    e.preventDefault();
+    if (!editingRemarkText.trim() || !editingRemarkId) return;
+
+    setSaving(true);
+
+    const updatedRemarkData = {
+      id: editingRemarkId,
+      text: editingRemarkText.trim(),
+      priority: editingRemarkPriority,
+      images: editingRemarkImages,
+      updatedAt: new Date()
+    };
+
+    try {
+      const remarkRef = doc(db, 'remarks', editingRemarkId);
+      await updateDoc(remarkRef, {
+        text: updatedRemarkData.text,
+        priority: updatedRemarkData.priority,
+        images: updatedRemarkData.images,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update local state
+      setRemarks(prev => prev.map(remark =>
+        remark.id === editingRemarkId
+          ? { ...remark, ...updatedRemarkData }
+          : remark
+      ));
+
+      console.log('Remark updated online successfully');
+
+      // Reset form on successful save
+      cancelEditRemark();
+
+    } catch (error) {
+      console.error('Failed to update remark:', error);
+      toast.error('Kunde inte uppdatera anmärkning. Kontrollera internetanslutning.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const navigateToNode = (node) => {
+    if (node.id === currentNode?.id) return;
+    setCurrentNode(node);
+    // Remarks laddas automatiskt via useEffect när currentNode ändras
+  };
+
+  const getNodePath = (node) => {
+    if (!node) return [];
+    
+    const path = [node];
+    let currentNodeInPath = node;
+    
+    // Bygg path genom att följa parent-kedjan
+    while (currentNodeInPath.parentId) {
+      const parent = nodes.find(n => n.id === currentNodeInPath.parentId);
+      if (parent) {
+        path.unshift(parent);
+        currentNodeInPath = parent;
+      } else {
+        break;
+      }
+    }
+    
+    return path;
+  };
+
+  const getChildNodes = (parentId) => {
+    return nodes.filter(node => node.parentId === parentId);
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'A': return '#dc2626'; // Röd
+      case 'B': return '#f59e0b'; // Orange  
+      case 'C': return '#10b981'; // Grön
+      default: return '#6b7280'; // Grå
+    }
+  };
+
+  const getPriorityBg = (priority) => {
+    switch (priority) {
+      case 'A': return '#fef2f2'; // Ljusröd
+      case 'B': return '#fffbeb'; // Ljusorange
+      case 'C': return '#f0fdf4'; // Ljusgrön
+      default: return '#f9fafb'; // Ljusgrå
+    }
+  };
+
+  const handleDeleteNode = async (nodeId, nodeName) => {
+    confirmation.confirm({
+      title: 'Ta bort nod',
+      message: `Är du säker på att du vill ta bort "${nodeName}"? Detta tar också bort alla undernoder och anmärkningar.`,
+      confirmText: 'Ja, ta bort',
+      cancelText: 'Avbryt',
+      confirmButtonClass: 'danger',
+      onConfirm: async () => {
+        setSaving(true);
+
+        try {
+          // Find all child nodes recursively for UI updates
+          const findAllChildNodes = (parentId, allNodes) => {
+            const children = allNodes.filter(n => n.parentId === parentId);
+            let allChildren = [...children];
+            children.forEach(child => {
+              allChildren = [...allChildren, ...findAllChildNodes(child.id, allNodes)];
+            });
+            return allChildren;
+          };
+
+          const childNodes = findAllChildNodes(nodeId, nodes);
+          const allNodesToDelete = [nodeId, ...childNodes.map(n => n.id)];
+
+          // Online deletion
+          for (const nId of allNodesToDelete) {
+            const remarksQuery = query(collection(db, 'remarks'), where('placeId', '==', nId));
+            const remarksSnapshot = await getDocs(remarksQuery);
+            for (const remarkDoc of remarksSnapshot.docs) {
+              await deleteDoc(doc(db, 'remarks', remarkDoc.id));
+            }
+          }
+
+          for (const nId of allNodesToDelete) {
+            await deleteDoc(doc(db, 'places', nId));
+          }
+
+          console.log('Node deleted online successfully');
+
+          // Update local UI immediately
+          const remainingNodes = nodes.filter(n => !allNodesToDelete.includes(n.id));
+          setNodes(remainingNodes);
+
+          // Handle current node change
+          if (nodeId === currentNode?.id) {
+            if (remainingNodes.length > 0) {
+              const newCurrent = remainingNodes.find(n => !n.parentId) || remainingNodes[0];
+              setCurrentNode(newCurrent);
+              await loadRemarksForNode(newCurrent.id);
+            } else {
+              setCurrentNode(null);
+              setRemarks([]);
+            }
+          }
+
+        } catch (err) {
+          console.error('Error deleting node:', err);
+          toast.error('Kunde inte ta bort nod');
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
+  };
+
+  const handleDeleteRemark = async (remarkId) => {
+    confirmation.confirm({
+      title: 'Ta bort anmärkning',
+      message: 'Är du säker på att du vill ta bort denna anmärkning?',
+      confirmText: 'Ja, ta bort',
+      cancelText: 'Avbryt',
+      confirmButtonClass: 'danger',
+      onConfirm: async () => {
+        try {
+          // Online deletion
+          await deleteDoc(doc(db, 'remarks', remarkId));
+
+          // Check if node still has remarks
+          const remainingRemarks = remarks.filter(r => r.id !== remarkId);
+          if (remainingRemarks.length === 0 && currentNode.hasRemarks) {
+            await updateDoc(doc(db, 'places', currentNode.id), {
+              hasRemarks: false
+            });
+
+            setCurrentNode(prev => ({ ...prev, hasRemarks: false }));
+            setNodes(prev => prev.map(node =>
+              node.id === currentNode.id ? { ...node, hasRemarks: false } : node
+            ));
+          }
+
+          console.log('Remark deleted online successfully');
+
+          // Update local UI immediately
+          setRemarks(prev => prev.filter(r => r.id !== remarkId));
+
+        } catch (err) {
+          console.error('Error deleting remark:', err);
+          toast.error('Kunde inte ta bort anmärkning');
+        }
+      }
+    });
+  };
+
+  const handleEditNodeName = async (nodeId) => {
+    if (!editingNodeName.trim()) return;
+
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'places', nodeId), {
+        name: editingNodeName.trim(),
+        updatedAt: serverTimestamp()
+      });
+
+      // Uppdatera local state
+      setNodes(prev => prev.map(node => 
+        node.id === nodeId ? { ...node, name: editingNodeName.trim() } : node
+      ));
+
+      if (currentNode?.id === nodeId) {
+        setCurrentNode(prev => ({ ...prev, name: editingNodeName.trim() }));
+      }
+
+      setEditingNodeId(null);
+      setEditingNodeName('');
+    } catch (err) {
+      console.error('Error updating node name:', err);
+      toast.error('Kunde inte uppdatera nodnamn');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditControlName = async () => {
+    if (!newControlName.trim()) return;
+
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'inspections', controlId), {
+        name: newControlName.trim(),
+        updatedAt: serverTimestamp()
+      });
+
+      // Uppdatera local state
+      setControl(prev => ({ ...prev, name: newControlName.trim() }));
+      setEditingControlName(false);
+      setNewControlName('');
+    } catch (err) {
+      console.error('Error updating control name:', err);
+      toast.error('Kunde inte uppdatera kontrollnamn');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleControlStatus = async () => {
+    if (!control) return;
+
+    setSaving(true);
+    try {
+      const newStatus = control.status === 'completed' ? 'active' : 'completed';
+
+      await updateDoc(doc(db, 'inspections', controlId), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+
+      // Uppdatera local state
+      setControl(prev => ({ ...prev, status: newStatus }));
+    } catch (err) {
+      console.error('Error updating control status:', err);
+      toast.error('Kunde inte uppdatera kontrollstatus');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleImagesUploaded = (uploadedImages) => {
+    console.log('Images uploaded:', uploadedImages);
+    // Only add images if we're in add remark mode (showAddRemark is true)
+    if (showAddRemark) {
+      setRemarkImages(prev => [...prev, ...uploadedImages]);
+    }
+  };
+
+  const deleteStorageImage = async (image) => {
+    try {
+      if (!image.path) {
+        console.warn('No path for image, skipping storage deletion');
+        return;
+      }
+
+      const imageRef = ref(storage, image.path);
+      await deleteObject(imageRef);
+      console.log('Image deleted successfully from Firebase Storage:', image.path);
+    } catch (error) {
+      console.error('Error deleting image from storage:', error);
+      // Inte kritiskt fel - fortsatt anda
+    }
+  };
+
+  const openImageModal = (image, allImages = [], imageIndex = 0) => {
+    setModalImage(image);
+    setAllModalImages(allImages);
+    setModalImageIndex(imageIndex);
+    setShowImageModal(true);
+  };
+
+  const closeImageModal = () => {
+    setShowImageModal(false);
+    setModalImage(null);
+    setAllModalImages([]);
+    setModalImageIndex(0);
+  };
+
+  // Open annotation editor
+  const openAnnotation = (image, remarkId, imageIndex) => {
+    setAnnotationImage(image);
+    setAnnotationRemarkId(remarkId);
+    setAnnotationImageIndex(imageIndex);
+    setShowAnnotation(true);
+  };
+
+  // Save annotated image
+  const handleSaveAnnotation = async (blob, originalName) => {
+    if (!annotationRemarkId || annotationImageIndex === null) return;
+
+    try {
+      // Upload the annotated image to Firebase Storage
+      const timestamp = Date.now();
+      const fileName = `annotated_${timestamp}_${originalName || 'image.png'}`;
+      const storagePath = `teams/${currentTeam?.id}/controls/${controlId}/remarks/${annotationRemarkId}/${fileName}`;
+
+      const imageRef = ref(storage, storagePath);
+      const { uploadBytes, getDownloadURL } = await import('firebase/storage');
+      await uploadBytes(imageRef, blob);
+      const downloadUrl = await getDownloadURL(imageRef);
+
+      // Update the remark with the new annotated image
+      const remark = remarks.find(r => r.id === annotationRemarkId);
+      if (remark) {
+        const updatedImages = [...(remark.images || [])];
+        updatedImages[annotationImageIndex] = {
+          url: downloadUrl,
+          path: storagePath,
+          originalName: fileName,
+          annotated: true
+        };
+
+        await updateDoc(doc(db, 'remarks', annotationRemarkId), {
+          images: updatedImages,
+          updatedAt: serverTimestamp()
+        });
+
+        // Update local state
+        setRemarks(prev => prev.map(r =>
+          r.id === annotationRemarkId
+            ? { ...r, images: updatedImages }
+            : r
+        ));
+
+        toast.success('Annoterad bild sparad');
+      }
+    } catch (error) {
+      console.error('Error saving annotated image:', error);
+      toast.error('Kunde inte spara annoterad bild');
+    }
+
+    // Close annotation modal
+    setShowAnnotation(false);
+    setAnnotationImage(null);
+    setAnnotationRemarkId(null);
+    setAnnotationImageIndex(null);
+  };
+
+  // Generera publik delningslänk
+  const generatePublicLink = async () => {
+    if (publicToken) return; // Redan genererad
+
+    try {
+      // Skapa unik token
+      const token = `${controlId.substring(0, 8)}-${Date.now().toString(36)}`;
+
+      // Spara till Firebase
+      const controlRef = doc(db, 'inspections', controlId);
+      await updateDoc(controlRef, {
+        publicToken: token,
+        teamName: currentTeam?.name || ''
+      });
+
+      setPublicToken(token);
+      toast.success('Publik länk skapad!');
+    } catch (error) {
+      console.error('Error generating public link:', error);
+      toast.error('Kunde inte skapa publik länk');
+    }
+  };
+
+  // Hämta publik URL
+  const getPublicUrl = () => {
+    if (!publicToken) return null;
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/view/${publicToken}`;
+  };
+
+  // Öppna datumväljare innan PDF genereras
+  const handleGeneratePDF = () => {
+    setPdfDate(new Date().toISOString().split('T')[0]);
+    setShowPdfDateModal(true);
+  };
+
+  // Faktiskt generera PDF efter datum valts
+  const doGeneratePDF = async () => {
+    setShowPdfDateModal(false);
+    if (!control || !nodes.length) {
+      toast.error('Ingen kontrolldata att generera PDF från');
+      return;
+    }
+
+    setGeneratingPDF(true);
+    setPdfProgress({ percent: 0, message: 'Förbereder...', error: null });
+
+    try {
+      console.log('Starting PDF generation for control:', control.name);
+
+      // Hämta ALLA anmärkningar för alla noder i kontrollen
+      setPdfProgress({ percent: 10, message: 'Laddar anmärkningar...', error: null });
+      const allRemarks = await loadAllRemarksForControl(nodes);
+
+      // Räkna bilder
+      let totalImages = 0;
+      allRemarks.forEach(r => {
+        if (r.images && r.images.length > 0) totalImages += r.images.length;
+      });
+
+      // Hämta kontrollpunkter och instruktionstext
+      setPdfProgress({ percent: 20, message: 'Laddar kontrollpunkter...', error: null });
+      const kontrollpunkter = await loadKontrollpunkter();
+      const instructionText = await loadInstructionText();
+
+      console.log('Data:', {
+        nodes: nodes.length,
+        allRemarks: allRemarks.length,
+        totalImages,
+        kontrollpunkter: kontrollpunkter.length
+      });
+
+      // Hämta användarens profil
+      const pdfUserProfile = {
+        companyName: userProfile?.companyName || currentTeam?.name || currentUser?.displayName || '',
+        phone: userProfile?.phone || '',
+        website: userProfile?.website || '',
+        logoUrl: userProfile?.logoUrl || null
+      };
+
+      // Progress callback för PDF-generering
+      const onProgress = (progress, message) => {
+        const totalProgress = 30 + (progress * 0.65); // 30-95%
+        setPdfProgress({
+          percent: Math.min(95, totalProgress),
+          message: totalImages > 0 ? `Genererar PDF... (${totalImages} bilder)` : 'Genererar PDF...',
+          error: null
+        });
+      };
+
+      // Generera PDF
+      setPdfProgress({ percent: 30, message: totalImages > 0 ? `Laddar ${totalImages} bilder...` : 'Genererar PDF...', error: null });
+      const pdfDoc = await generateControlPDF(control, nodes, allRemarks, pdfUserProfile, kontrollpunkter, instructionText, onProgress, pdfDate, getPublicUrl());
+
+      // Hämta statistik
+      const stats = pdfDoc.pdfStats || {};
+
+      setPdfProgress({ percent: 95, message: 'Sparar PDF...', error: null });
+
+      // Skapa filnamn
+      const date = new Date().toLocaleDateString('sv-SE').replace(/\//g, '-');
+      const fileName = `${control.name.replace(/[^a-zA-Z0-9\-_]/g, '_')}_${date}.pdf`;
+
+      // Spara PDF
+      pdfDoc.save(fileName);
+
+      // Log PDF export
+      if (logger) {
+        logger.pdfExported(control.name);
+      }
+
+      console.log('PDF generated successfully:', fileName, stats);
+
+      // Visa resultat med statistik
+      let successMessage = `${fileName} har laddats ner`;
+      if (stats.totalImages > 0) {
+        successMessage += ` (${stats.loadedImages}/${stats.totalImages} bilder`;
+        if (stats.failedImages > 0) {
+          successMessage += `, ${stats.failedImages} kunde inte laddas`;
+        }
+        successMessage += `, ${stats.elapsedSeconds}s)`;
+      }
+
+      setPdfProgress({ percent: 100, message: successMessage, error: null });
+
+      // Ingen auto-stängning - användaren stänger manuellt med X
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setPdfProgress({
+        percent: 0,
+        message: '',
+        error: `Kunde inte generera PDF: ${error.message}`
+      });
+      // Behåll modalen öppen vid fel så användaren ser meddelandet
+    }
+  };
+
+
+  const handleDeleteImageFromRemark = async (remarkId, imageIndex, image) => {
+    confirmation.confirm({
+      title: 'Ta bort bild',
+      message: 'Är du säker på att du vill ta bort denna bild?',
+      confirmText: 'Ja, ta bort',
+      cancelText: 'Avbryt',
+      confirmButtonClass: 'danger',
+      onConfirm: async () => {
+        try {
+          // Ta bort fran Firebase Storage
+          await deleteStorageImage(image);
+
+          // Uppdatera anmärkningen i Firestore
+          const remark = remarks.find(r => r.id === remarkId);
+          if (remark) {
+            const updatedImages = remark.images.filter((_, index) => index !== imageIndex);
+
+            await updateDoc(doc(db, 'remarks', remarkId), {
+              images: updatedImages,
+              updatedAt: serverTimestamp()
+            });
+
+            // Uppdatera lokal state
+            setRemarks(prev => prev.map(r =>
+              r.id === remarkId
+                ? { ...r, images: updatedImages }
+                : r
+            ));
+          }
+        } catch (error) {
+          console.error('Error deleting image from remark:', error);
+          toast.error('Kunde inte ta bort bild');
+        }
+      }
+    });
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: windowWidth > 768 ? '40px 24px' : '20px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '400px'
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          border: '4px solid #e5e7eb',
+          borderTop: '4px solid #6366F1',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <span style={{ marginLeft: '16px', color: '#6b7280', fontSize: '16px' }}>
+          Laddar kontroll...
+        </span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: windowWidth > 768 ? '40px 24px' : '20px 16px'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          padding: '48px',
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+        }}>
+          <h3 style={{ color: '#dc2626', marginBottom: '16px' }}>{error}</h3>
+          <Link to="/customers" style={{ color: '#6366F1', textDecoration: 'none' }}>
+            ← Tillbaka till kunder
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const nodePath = currentNode ? getNodePath(currentNode) : [];
+  const childNodes = currentNode ? getChildNodes(currentNode.id) : getChildNodes(null);
+
+  return (
+    <div style={{
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: windowWidth > 768 ? '24px' : '16px',
+      background: '#f8fafc',
+      minHeight: '100vh'
+    }}>
+      {/* CSS */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+
+      {/* Header */}
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: windowWidth > 768 ? '24px' : '20px',
+        marginBottom: '20px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)',
+        border: '1px solid #e2e8f0'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}>
+          <div>
+            <Link 
+              to={`/customers/${control?.customerId}`}
+              style={{
+                color: '#6b7280',
+                textDecoration: 'none',
+                fontSize: '14px',
+                display: 'block',
+                marginBottom: '8px'
+              }}
+            >
+              ← {control?.customerName}
+            </Link>
+            {editingControlName ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                flex: 1
+              }}>
+                <input
+                  type="text"
+                  value={newControlName}
+                  onChange={(e) => setNewControlName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleEditControlName()}
+                  style={{
+                    fontSize: windowWidth > 768 ? '28px' : '24px',
+                    fontWeight: 'bold',
+                    color: '#1f2937',
+                    border: '2px solid #6366F1',
+                    borderRadius: '6px',
+                    padding: '4px 8px',
+                    flex: 1,
+                    background: 'white'
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleEditControlName}
+                  disabled={saving || !newControlName.trim()}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Spara
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingControlName(false);
+                    setNewControlName('');
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Avbryt
+                </button>
+              </div>
+            ) : (
+              <h1 
+                style={{
+                  fontSize: windowWidth > 768 ? '28px' : '24px',
+                  fontWeight: 'bold',
+                  color: '#1f2937',
+                  margin: 0,
+                  cursor: 'pointer'
+                }}
+                onClick={() => {
+                  setEditingControlName(true);
+                  setNewControlName(control?.name || '');
+                }}
+                title="Klicka för att redigera kontrollnamn"
+              >
+                {control?.name}
+              </h1>
+            )}
+          </div>
+          
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              onClick={handleGeneratePDF}
+              disabled={generatingPDF || !nodes.length}
+              style={{
+                padding: '8px 16px',
+                background: generatingPDF || !nodes.length ? '#9ca3af' : '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: generatingPDF || !nodes.length ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title={!nodes.length ? 'Inga noder att exportera' : 'Exportera kontroll som PDF'}
+            >
+              {generatingPDF ? (
+                <>
+                  <span>⏳</span>
+                  Genererar...
+                </>
+              ) : (
+                <>
+                  Exportera PDF
+                </>
+              )}
+            </button>
+            
+            <button 
+              onClick={toggleControlStatus}
+              style={{
+                padding: '6px 12px',
+                background: control?.status === 'completed' ? '#10b981' : '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              title="Klicka för att ändra status"
+            >
+              {control?.status === 'completed' ? 'Slutförd' : 'Aktiv'}
+            </button>
+            
+            {/* Offline status indicator removed */}
+          </div>
+        </div>
+      </div>
+
+      {/* Om inga noder finns - Skapa första noden */}
+      {nodes.length === 0 && (
+        <div style={{
+          background: 'white',
+          borderRadius: '16px',
+          padding: windowWidth > 768 ? '48px' : '32px',
+          textAlign: 'center',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)',
+          border: '1px solid #e2e8f0'
+        }}>
+          <h2 style={{ fontSize: '24px', color: '#1f2937', marginBottom: '16px' }}>
+            Välkommen till din nya kontroll!
+          </h2>
+          <p style={{ color: '#6b7280', marginBottom: '32px', fontSize: '16px' }}>
+            Börja med att skapa din första nod - det kan vara byggnadens namn, ett rum eller område.
+          </p>
+          
+          {!showAddNode ? (
+            <button
+              onClick={() => {
+                setShowAddNode(true);
+                setAddAsChild(false);
+              }}
+              style={{
+                background: '#6366F1',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '16px 32px',
+                fontSize: '18px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 4px 6px rgba(0, 102, 204, 0.25)'
+              }}
+            >
+              + Skapa första nod
+            </button>
+          ) : (
+            <form onSubmit={(e) => handleAddNode(e, false)} style={{ maxWidth: '400px', margin: '0 auto' }}>
+              <input
+                type="text"
+                value={newNodeName}
+                onChange={(e) => setNewNodeName(e.target.value)}
+                placeholder="T.ex. Barnhusgatan 24, Entréhall, Källare..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '16px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddNode(false);
+                    setNewNodeName('');
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newNodeName.trim()}
+                  style={{
+                    padding: '12px 24px',
+                    background: saving || !newNodeName.trim() ? '#9ca3af' : '#6366F1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: saving || !newNodeName.trim() ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {saving ? 'Skapar...' : 'Skapa'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* Main Content - om vi har noder */}
+      {nodes.length > 0 && (
+        <div>
+          {/* Navigation Card för alla skärmstorlekar */}
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: windowWidth > 768 ? '24px' : '16px',
+            marginBottom: '20px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)',
+            border: '1px solid #e2e8f0'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '16px'
+            }}>
+              <h3 style={{
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#1f2937',
+                margin: 0
+              }}>
+                Navigering
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddNode(true);
+                  setAddAsChild(false);
+                }}
+                style={{
+                  padding: '6px 12px',
+                  background: '#f0f9ff',
+                  color: '#6366F1',
+                  border: '2px solid #bae6fd',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '500'
+                }}
+              >
+                + Huvudnod
+              </button>
+            </div>
+            
+            {/* Navigation tree - scrollbar på mobil */}
+            <div style={{
+              maxHeight: windowWidth <= 768 ? '200px' : 'none',
+              overflowY: windowWidth <= 768 ? 'auto' : 'visible',
+              paddingRight: windowWidth <= 768 ? '4px' : '0'
+            }}>
+              {nodes.filter(n => !n.parentId).map(rootNode => (
+                <NodeTreeItem 
+                  key={rootNode.id} 
+                  node={rootNode} 
+                  nodes={nodes}
+                  currentNode={currentNode}
+                  onNavigate={navigateToNode}
+                  level={0}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div>
+            {/* Breadcrumb */}
+            {nodePath.length > 0 && (
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: windowWidth > 768 ? '16px' : '12px',
+                marginBottom: '16px',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  {nodePath.map((node, index) => (
+                    <React.Fragment key={node.id}>
+                      <button
+                        onClick={() => navigateToNode(node)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: index === nodePath.length - 1 ? '#6366F1' : '#6b7280',
+                          fontWeight: index === nodePath.length - 1 ? '600' : 'normal',
+                          cursor: 'pointer',
+                          fontSize: windowWidth <= 768 ? '12px' : '14px',
+                          padding: '4px 2px',
+                          minHeight: windowWidth <= 768 ? '32px' : 'auto'
+                        }}
+                      >
+                        {windowWidth <= 480 && node.name.length > 15 
+                          ? `${node.name.substring(0, 15)}...` 
+                          : node.name
+                        }
+                      </button>
+                      {index < nodePath.length - 1 && (
+                        <span style={{ color: '#9ca3af', fontSize: windowWidth <= 768 ? '12px' : '14px' }}>→</span>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Current Node Content */}
+            {currentNode && (
+              <div style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: windowWidth > 768 ? '24px' : '20px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '24px',
+                  flexWrap: 'wrap',
+                  gap: '16px'
+                }}>
+                  {editingNodeId === currentNode.id ? (
+                    <div style={{ 
+                      width: '100%',
+                      maxWidth: '100%',
+                      display: windowWidth <= 768 ? 'block' : 'flex',
+                      gap: '8px'
+                    }}>
+                      <input
+                        type="text"
+                        value={editingNodeName}
+                        onChange={(e) => setEditingNodeName(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleEditNodeName(currentNode.id)}
+                        style={{
+                          fontSize: windowWidth <= 768 ? '16px' : '20px',
+                          fontWeight: 'bold',
+                          color: '#1f2937',
+                          border: '2px solid #6366F1',
+                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          width: windowWidth <= 768 ? '100%' : 'auto',
+                          flex: windowWidth <= 768 ? 'none' : 1,
+                          marginBottom: windowWidth <= 768 ? '8px' : '0',
+                          boxSizing: 'border-box'
+                        }}
+                        autoFocus
+                      />
+                      <div style={{
+                        display: 'flex',
+                        gap: '8px',
+                        justifyContent: windowWidth <= 768 ? 'flex-end' : 'flex-start'
+                      }}>
+                        <button
+                          onClick={() => handleEditNodeName(currentNode.id)}
+                          disabled={saving || !editingNodeName.trim()}
+                          style={{
+                            padding: '8px 12px',
+                            background: '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Spara
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingNodeId(null);
+                            setEditingNodeName('');
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            background: '#6b7280',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Avbryt
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <h2 
+                      style={{
+                        fontSize: '24px',
+                        fontWeight: 'bold',
+                        color: '#1f2937',
+                        margin: 0,
+                        cursor: 'pointer',
+                        flex: 1
+                      }}
+                      onClick={() => {
+                        setEditingNodeId(currentNode.id);
+                        setEditingNodeName(currentNode.name);
+                      }}
+                      title="Klicka för att redigera namn"
+                    >
+                      {currentNode.name}
+                    </h2>
+                  )}
+
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: windowWidth <= 768 ? '6px' : '8px',
+                    flexWrap: windowWidth <= 480 ? 'wrap' : 'nowrap'
+                  }}>
+                    <button
+                      onClick={() => {
+                        setShowAddNode(true);
+                        setAddAsChild(true); // Lägg till som barn till current node
+                      }}
+                      style={{
+                        padding: windowWidth <= 768 ? '6px 12px' : '8px 16px',
+                        background: '#f0f9ff',
+                        color: '#6366F1',
+                        border: '2px solid #bae6fd',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: windowWidth <= 768 ? '12px' : '14px',
+                        fontWeight: '500',
+                        minWidth: windowWidth <= 480 ? '80px' : 'auto'
+                      }}
+                    >
+                      + Undernod
+                    </button>
+                    
+                    <button
+                      onClick={() => setShowAddRemark(true)}
+                      style={{
+                        padding: windowWidth <= 768 ? '6px 12px' : '8px 16px',
+                        background: '#6366F1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: windowWidth <= 768 ? '12px' : '14px',
+                        fontWeight: '500',
+                        minWidth: windowWidth <= 480 ? '100px' : 'auto'
+                      }}
+                    >
+                      + Anmärkning
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteNode(currentNode.id, currentNode.name)}
+                      disabled={saving}
+                      style={{
+                        padding: windowWidth <= 768 ? '6px 12px' : '8px 16px',
+                        background: '#fef2f2',
+                        color: '#dc2626',
+                        border: '2px solid #fecaca',
+                        borderRadius: '8px',
+                        cursor: saving ? 'not-allowed' : 'pointer',
+                        fontSize: windowWidth <= 768 ? '12px' : '14px',
+                        fontWeight: '500',
+                        minWidth: windowWidth <= 480 ? '70px' : 'auto'
+                      }}
+                    >
+                      Ta bort
+                    </button>
+                  </div>
+                </div>
+
+                {/* Child nodes */}
+                {childNodes.length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h4 style={{
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      color: '#4b5563',
+                      marginBottom: '12px'
+                    }}>
+                      Undernoder:
+                    </h4>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: windowWidth > 768 
+                        ? 'repeat(auto-fill, minmax(200px, 1fr))' 
+                        : windowWidth > 480 
+                          ? 'repeat(2, 1fr)' 
+                          : '1fr',
+                      gap: windowWidth <= 768 ? '6px' : '8px'
+                    }}>
+                      {childNodes.map(node => (
+                        <button
+                          key={node.id}
+                          onClick={() => navigateToNode(node)}
+                          style={{
+                            padding: windowWidth <= 768 ? '10px 12px' : '12px 16px',
+                            background: '#f8fafc',
+                            color: '#1f2937',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'all 0.2s',
+                            position: 'relative',
+                            fontSize: windowWidth <= 768 ? '13px' : '14px',
+                            minHeight: windowWidth <= 480 ? '44px' : 'auto',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          {node.name}
+                          {node.hasRemarks && (
+                            <span style={{
+                              position: 'absolute',
+                              top: '8px',
+                              right: '8px',
+                              width: '8px',
+                              height: '8px',
+                              background: '#f59e0b',
+                              borderRadius: '50%'
+                            }} />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Remarks */}
+                <div>
+                  <h4 style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: '#4b5563',
+                    marginBottom: '16px'
+                  }}>
+                    Anmärkningar ({remarks.length}):
+                  </h4>
+
+                  {remarks.length === 0 ? (
+                    <p style={{
+                      color: '#9ca3af',
+                      fontStyle: 'italic',
+                      textAlign: 'center',
+                      padding: '32px'
+                    }}>
+                      Inga anmärkningar för denna nod. Klicka på "+ Anmärkning" för att lägga till en.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {remarks.map(remark => (
+                        <div
+                          key={remark.id}
+                          style={{
+                            padding: '16px',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            borderLeft: `4px solid ${remark.priority ? getPriorityColor(remark.priority) : '#e2e8f0'}`,
+                            position: 'relative'
+                          }}
+                        >
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: '8px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {remark.priority && (
+                                <span style={{
+                                  fontSize: '12px',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  background: getPriorityBg(remark.priority),
+                                  color: getPriorityColor(remark.priority),
+                                  fontWeight: '600'
+                                }}>
+                                  Prioritet {remark.priority}
+                                </span>
+                              )}
+                              {remark.status === 'offline' && (
+                                <span style={{
+                                  fontSize: '10px',
+                                  padding: '1px 6px',
+                                  borderRadius: '3px',
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  fontWeight: '600'
+                                }}>
+                                  OFFLINE
+                                </span>
+                              )}
+                              <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                                {remark.createdAt?.toDate?.()?.toLocaleString('sv-SE') || 
+                                 remark.createdAt?.toLocaleString?.('sv-SE') || 'Nu'}
+                              </span>
+                            </div>
+                            
+                            <button
+                              onClick={() => startEditRemark(remark)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#6366F1',
+                                cursor: 'pointer',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                marginRight: '8px'
+                              }}
+                              title="Redigera anmärkning"
+                            >
+                              Redigera
+                            </button>
+                            <button
+                              onClick={() => handleDeleteRemark(remark.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#dc2626',
+                                cursor: 'pointer',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '12px'
+                              }}
+                              title="Ta bort anmärkning"
+                            >
+                              Ta bort
+                            </button>
+                          </div>
+                          <p style={{ color: '#1f2937', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                            {remark.text}
+                          </p>
+                          
+                          {/* Visa bilder om de finns */}
+                          {remark.images && remark.images.length > 0 && (
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: windowWidth <= 768 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+                              gap: '8px',
+                              marginTop: '12px',
+                              width: '100%',
+                              overflow: 'hidden'
+                            }}>
+                              {remark.images.map((image, imageIndex) => (
+                                <div key={imageIndex} style={{ position: 'relative' }}>
+                                  <img
+                                    src={image.url || image.remoteUrl}
+                                    alt={image.originalName || 'Uppladdad bild'}
+                                    style={{
+                                      width: '100%',
+                                      maxWidth: '100%',
+                                      height: '80px',
+                                      objectFit: 'cover',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      display: 'block'
+                                    }}
+                                    onClick={() => openImageModal(image, remark.images, imageIndex)}
+                                    title={`Klicka för att öppna ${image.originalName || 'bild'} i full storlek`}
+                                  />
+                                  {/* Rita-knapp */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openAnnotation(image, remark.id, imageIndex);
+                                    }}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '2px',
+                                      left: '2px',
+                                      background: 'rgba(59, 130, 246, 0.9)',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      padding: '2px 6px',
+                                      cursor: 'pointer',
+                                      fontSize: '10px',
+                                      fontWeight: '600',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '2px'
+                                    }}
+                                    title="Rita på bilden"
+                                  >
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                                      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                                    </svg>
+                                    Rita
+                                  </button>
+                                  {/* Annoterad badge */}
+                                  {image.annotated && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      bottom: '2px',
+                                      left: '2px',
+                                      background: 'rgba(16, 185, 129, 0.9)',
+                                      color: 'white',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      fontSize: '9px',
+                                      fontWeight: '600'
+                                    }}>
+                                      Annoterad
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => handleDeleteImageFromRemark(remark.id, imageIndex, image)}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '2px',
+                                      right: '2px',
+                                      background: 'rgba(220, 38, 38, 0.8)',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '50%',
+                                      width: '20px',
+                                      height: '20px',
+                                      cursor: 'pointer',
+                                      fontSize: '12px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}
+                                    title="Ta bort bild"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Node Modal */}
+      {showAddNode && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '100%'
+          }}>
+            <h3 style={{ marginBottom: '20px', fontSize: '20px', color: '#1f2937' }}>
+              {addAsChild ? 'Lägg till undernod' : 'Lägg till huvudnod'}
+            </h3>
+            
+            {currentNode && addAsChild && (
+              <p style={{ color: '#6b7280', marginBottom: '16px', fontSize: '14px' }}>
+                Skapar undernod till: <strong>{currentNode.name}</strong>
+              </p>
+            )}
+            
+            {!addAsChild && (
+              <p style={{ color: '#6b7280', marginBottom: '16px', fontSize: '14px' }}>
+                Skapar ny huvudnod på toppnivå
+              </p>
+            )}
+
+            <form onSubmit={(e) => handleAddNode(e, addAsChild)}>
+              <input
+                type="text"
+                value={newNodeName}
+                onChange={(e) => setNewNodeName(e.target.value)}
+                placeholder="Namn på nod (t.ex. Källare, Elcentral, Rum 101...)"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '20px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddNode(false);
+                    setNewNodeName('');
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newNodeName.trim()}
+                  style={{
+                    padding: '12px 24px',
+                    background: saving || !newNodeName.trim() ? '#9ca3af' : '#6366F1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: saving || !newNodeName.trim() ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {saving ? 'Skapar...' : 'Skapa nod'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Remark Modal */}
+      {showAddRemark && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '600px',
+            width: '100%'
+          }}>
+            <h3 style={{ marginBottom: '20px', fontSize: '20px', color: '#1f2937' }}>
+              Ny anmärkning
+            </h3>
+            
+            {currentNode && (
+              <p style={{ color: '#6b7280', marginBottom: '16px', fontSize: '14px' }}>
+                Anmärkning för: <strong>{currentNode.name}</strong>
+              </p>
+            )}
+
+            <form onSubmit={handleAddRemark}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  marginBottom: '6px'
+                }}>
+                  Prioritet (valfritt):
+                </label>
+                <select
+                  value={newRemarkPriority}
+                  onChange={(e) => setNewRemarkPriority(e.target.value)}
+                  style={{
+                    padding: '8px 12px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    width: '150px'
+                  }}
+                >
+                  <option value="">
+                    Ingen prioritet
+                  </option>
+                  <option value="A">A - Hög prioritet</option>
+                  <option value="B">B - Medel prioritet</option>
+                  <option value="C">C - Låg prioritet</option>
+                </select>
+              </div>
+
+              <textarea
+                value={newRemarkText}
+                onChange={(e) => setNewRemarkText(e.target.value)}
+                placeholder="Beskriv anmärkningen... (t.ex. Fuktskador vid fönster, Slitage på golv, Defekt belysning)"
+                autoFocus
+                rows="4"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '20px',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+              />
+
+              <ControlImageUploader
+                controlId={controlId}
+                nodeId={currentNode?.id}
+                onImagesUploaded={handleImagesUploaded}
+                disabled={saving}
+              />
+              
+              {/* Visa redan valda bilder */}
+              {remarkImages.length > 0 && (
+                <div style={{
+                  marginBottom: '20px',
+                  padding: '12px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  background: '#f8fafc'
+                }}>
+                  <h4 style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#374151',
+                    marginBottom: '8px'
+                  }}>
+                    Valda bilder ({remarkImages.length}):
+                  </h4>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: windowWidth <= 768 ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)',
+                    gap: '8px',
+                    width: '100%',
+                    overflow: 'hidden'
+                  }}>
+                    {remarkImages.map((image, index) => (
+                      <div key={index} style={{ position: 'relative' }}>
+                        <img
+                          src={image.url || image.remoteUrl}
+                          alt={image.originalName}
+                          style={{
+                            width: '100%',
+                            maxWidth: '100%',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '4px',
+                            display: 'block'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRemarkImages(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            background: 'rgba(220, 38, 38, 0.8)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer',
+                            fontSize: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddRemark(false);
+                    setNewRemarkText('');
+                    setNewRemarkPriority('');
+                    setRemarkImages([]);
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newRemarkText.trim()}
+                  style={{
+                    padding: '12px 24px',
+                    background: saving || !newRemarkText.trim() ? '#9ca3af' : '#6366F1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: saving || !newRemarkText.trim() ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {saving ? 'Sparar...' : 'Spara anmärkning'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Remark Modal */}
+      {editingRemarkId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '600px',
+            width: '100%'
+          }}>
+            <h3 style={{ marginBottom: '20px', fontSize: '20px', color: '#1f2937' }}>
+              Redigera anmärkning
+            </h3>
+            
+            {currentNode && (
+              <p style={{ color: '#6b7280', marginBottom: '16px', fontSize: '14px' }}>
+                Anmärkning för: <strong>{currentNode.name}</strong>
+              </p>
+            )}
+
+            <form onSubmit={handleEditRemark}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  marginBottom: '6px'
+                }}>
+                  Prioritet (valfritt):
+                </label>
+                <select
+                  value={editingRemarkPriority}
+                  onChange={(e) => setEditingRemarkPriority(e.target.value)}
+                  style={{
+                    padding: '8px 12px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    width: '150px'
+                  }}
+                >
+                  <option value="">
+                    Ingen prioritet
+                  </option>
+                  <option value="A">A - Hög prioritet</option>
+                  <option value="B">B - Medel prioritet</option>
+                  <option value="C">C - Låg prioritet</option>
+                </select>
+              </div>
+
+              <textarea
+                value={editingRemarkText}
+                onChange={(e) => setEditingRemarkText(e.target.value)}
+                placeholder="Beskriv anmärkningen... (t.ex. Fuktskador vid fönster, Slitage på golv, Defekt belysning)"
+                autoFocus
+                rows="4"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '20px',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+              />
+
+              <ControlImageUploader
+                controlId={controlId}
+                nodeId={currentNode?.id}
+                onImagesUploaded={(newImages) => {
+                  setEditingRemarkImages(prev => [...prev, ...newImages]);
+                }}
+                disabled={saving}
+              />
+              
+              {/* Visa redan valda bilder för redigering */}
+              {editingRemarkImages.length > 0 && (
+                <div style={{
+                  marginBottom: '20px',
+                  padding: '12px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  background: '#f8fafc'
+                }}>
+                  <h4 style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#374151',
+                    marginBottom: '8px'
+                  }}>
+                    Valda bilder ({editingRemarkImages.length}):
+                  </h4>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                    gap: '8px'
+                  }}>
+                    {editingRemarkImages.map((image, index) => (
+                      <div key={index} style={{ position: 'relative' }}>
+                        <img
+                          src={image.url || image.remoteUrl}
+                          alt={image.originalName}
+                          style={{
+                            width: '100%',
+                            maxWidth: '100%',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '4px',
+                            display: 'block'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingRemarkImages(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            background: 'rgba(220, 38, 38, 0.8)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer',
+                            fontSize: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={cancelEditRemark}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !editingRemarkText.trim()}
+                  style={{
+                    padding: '12px 24px',
+                    background: saving || !editingRemarkText.trim() ? '#9ca3af' : '#6366F1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: saving || !editingRemarkText.trim() ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {saving ? 'Sparar...' : 'Uppdatera anmärkning'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={showImageModal}
+        onClose={closeImageModal}
+        image={modalImage}
+        allImages={allModalImages}
+        currentIndex={modalImageIndex}
+      />
+
+      {/* Image Annotation Modal */}
+      <ImageAnnotation
+        isOpen={showAnnotation}
+        onClose={() => {
+          setShowAnnotation(false);
+          setAnnotationImage(null);
+          setAnnotationRemarkId(null);
+          setAnnotationImageIndex(null);
+        }}
+        imageUrl={annotationImage?.url || annotationImage?.remoteUrl}
+        imageName={annotationImage?.originalName}
+        onSave={handleSaveAnnotation}
+      />
+
+      {/* PDF Datumväljare Modal */}
+      {showPdfDateModal && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '450px',
+            width: '90%',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>
+              Generera PDF
+            </h3>
+
+            {/* Datum */}
+            <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '14px' }}>
+              Datum för protokollet:
+            </p>
+            <input
+              type="date"
+              value={pdfDate}
+              onChange={(e) => setPdfDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '16px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                boxSizing: 'border-box'
+              }}
+            />
+
+            {/* Publik länk */}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <p style={{ margin: '0 0 8px 0', color: '#475569', fontSize: '13px', fontWeight: '500' }}>
+                Digital visning för kunder:
+              </p>
+              {publicToken ? (
+                <div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    backgroundColor: 'white',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    padding: '8px 12px'
+                  }}>
+                    <span style={{ flex: 1, fontSize: '12px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {getPublicUrl()}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(getPublicUrl());
+                        toast.success('Länk kopierad!');
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        backgroundColor: 'white',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Kopiera
+                    </button>
+                  </div>
+                  <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#94a3b8' }}>
+                    Länken inkluderas automatiskt i PDF:en
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={generatePublicLink}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '14px',
+                    border: '1px dashed #cbd5e1',
+                    borderRadius: '6px',
+                    backgroundColor: 'white',
+                    color: '#4f46e5',
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Skapa delningslänk
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowPdfDateModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  backgroundColor: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={doGeneratePDF}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  backgroundColor: '#4f46e5',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                Generera PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Generering Loading Modal */}
+      {generatingPDF && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1001
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+            textAlign: 'center',
+            position: 'relative'
+          }}>
+            {/* Stäng-knapp (X) - alltid synlig */}
+            <button
+              onClick={() => {
+                setGeneratingPDF(false);
+                setPdfProgress({ percent: 0, message: '', error: null });
+              }}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                width: '32px',
+                height: '32px',
+                border: 'none',
+                borderRadius: '50%',
+                backgroundColor: '#f3f4f6',
+                color: '#6b7280',
+                cursor: 'pointer',
+                fontSize: '18px',
+                fontWeight: '300',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M1 1L13 13M1 13L13 1" />
+              </svg>
+            </button>
+
+            {/* Ikon/Spinner */}
+            {pdfProgress.error ? (
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: '#fef2f2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px'
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M15 9L9 15M9 9L15 15" />
+                </svg>
+              </div>
+            ) : pdfProgress.percent === 100 ? (
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: '#f0fdf4',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px'
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17L4 12" />
+                </svg>
+              </div>
+            ) : (
+              <div style={{
+                width: '64px',
+                height: '64px',
+                border: '4px solid #e5e7eb',
+                borderTopColor: '#4f46e5',
+                borderRadius: '50%',
+                margin: '0 auto 20px',
+                animation: 'spin 1s linear infinite'
+              }} />
+            )}
+
+            {/* Titel */}
+            <h3 style={{
+              margin: '0 0 8px 0',
+              fontSize: '20px',
+              fontWeight: '600',
+              color: pdfProgress.error ? '#dc2626' : pdfProgress.percent === 100 ? '#16a34a' : '#1f2937'
+            }}>
+              {pdfProgress.error ? 'Fel vid generering' : pdfProgress.percent === 100 ? 'PDF klar!' : 'Genererar PDF'}
+            </h3>
+
+            {/* Meddelande */}
+            <p style={{
+              margin: '0 0 20px 0',
+              fontSize: '14px',
+              color: pdfProgress.error ? '#dc2626' : '#6b7280',
+              lineHeight: '1.5'
+            }}>
+              {pdfProgress.error || pdfProgress.message}
+            </p>
+
+            {/* Progress bar */}
+            {!pdfProgress.error && pdfProgress.percent < 100 && (
+              <div style={{
+                width: '100%',
+                height: '8px',
+                backgroundColor: '#e5e7eb',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                marginBottom: '12px'
+              }}>
+                <div style={{
+                  width: `${pdfProgress.percent}%`,
+                  height: '100%',
+                  backgroundColor: '#4f46e5',
+                  borderRadius: '4px',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+            )}
+
+            {/* Procent */}
+            {!pdfProgress.error && pdfProgress.percent < 100 && (
+              <p style={{
+                margin: 0,
+                fontSize: '13px',
+                color: '#9ca3af'
+              }}>
+                {Math.round(pdfProgress.percent)}%
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Notification system removed with offline functionality */}
+    </div>
+  );
+};
+
+// Helper component för node tree rendering
+const NodeTreeItem = ({ node, nodes, currentNode, onNavigate, level }) => {
+  const [expanded, setExpanded] = useState(true);
+  const children = nodes.filter(n => n.parentId === node.id);
+  const hasChildren = children.length > 0;
+
+  return (
+    <div style={{ marginLeft: `${level * 16}px` }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          background: currentNode?.id === node.id ? '#f0f9ff' : 'transparent',
+          border: '2px solid transparent',
+          cursor: 'pointer',
+          marginBottom: '4px'
+        }}
+        onClick={() => onNavigate(node)}
+      >
+        {hasChildren && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              marginRight: '4px',
+              color: '#6b7280',
+              fontSize: '12px',
+              padding: '2px'
+            }}
+          >
+            {expanded ? '▼' : '▶'}
+          </button>
+        )}
+        
+        <span style={{
+          fontSize: '14px',
+          color: currentNode?.id === node.id ? '#6366F1' : '#1f2937',
+          fontWeight: currentNode?.id === node.id ? '600' : 'normal',
+          flex: 1
+        }}>
+          {node.name}
+        </span>
+        
+        {node.hasRemarks && (
+          <span style={{
+            width: '6px',
+            height: '6px',
+            background: '#f59e0b',
+            borderRadius: '50%',
+            marginLeft: '4px'
+          }} />
+        )}
+      </div>
+      
+      {hasChildren && expanded && (
+        <div>
+          {children.map(child => (
+            <NodeTreeItem
+              key={child.id}
+              node={child}
+              nodes={nodes}
+              currentNode={currentNode}
+              onNavigate={onNavigate}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ControlView;
