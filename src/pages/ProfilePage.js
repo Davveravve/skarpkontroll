@@ -1,6 +1,7 @@
 // src/pages/ProfilePage.js - Premium profile page
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTeam } from '../contexts/TeamContext';
 import { useToast } from '../components/ui/Toast';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -9,6 +10,7 @@ import './ProfilePage.css';
 
 const ProfilePage = () => {
   const { currentUser, userProfile, fetchUserProfile } = useAuth();
+  const { updateMemberInfo, hasTeam } = useTeam();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,6 +55,11 @@ const ProfilePage = () => {
         ...profileData,
         updatedAt: serverTimestamp()
       });
+
+      // Uppdatera medlemsinfo i teamet om användaren är med i ett team
+      if (hasTeam && profileData.contactPerson) {
+        await updateMemberInfo(profileData.contactPerson, currentUser.email);
+      }
 
       await fetchUserProfile(currentUser.uid);
       toast.success('Profilen har uppdaterats!');

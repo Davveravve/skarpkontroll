@@ -10,7 +10,8 @@ import {
   where,
   getDocs,
   arrayUnion,
-  serverTimestamp
+  serverTimestamp,
+  deleteField
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
@@ -165,49 +166,50 @@ export const TeamProvider = ({ children }) => {
         setCurrentTeam(team);
         saveToCache(CACHE_KEYS.CURRENT_TEAM, team);
 
-        // Hämta medlemsinfo
+        // Hämta medlemsinfo från team-dokumentet (undviker permission-problem)
         if (team.members && team.members.length > 0) {
-          const memberPromises = team.members.map(async (memberId) => {
+          const memberInfo = team.memberInfo || {};
+
+          // Migrera: Om nuvarande användare saknar memberInfo, lägg till det
+          if (currentUser && team.members.includes(currentUser.uid) && !memberInfo[currentUser.uid]) {
+            console.log('TeamContext: Migrating current user memberInfo');
+            const currentUserInfo = {
+              displayName: userProfile?.contactPerson || userProfile?.displayName || userProfile?.companyName || currentUser.email?.split('@')[0] || 'Användare',
+              email: currentUser.email || ''
+            };
             try {
-              console.log('TeamContext: Fetching member document for:', memberId);
-              const memberDoc = await getDoc(doc(db, 'users', memberId));
-              console.log('TeamContext: Member doc exists?', memberDoc.exists(), 'for', memberId);
+              await updateDoc(doc(db, 'teams', teamId), {
+                [`memberInfo.${currentUser.uid}`]: currentUserInfo,
+                updatedAt: serverTimestamp()
+              });
+              memberInfo[currentUser.uid] = currentUserInfo;
+              console.log('TeamContext: Current user memberInfo migrated');
+            } catch (migErr) {
+              console.warn('TeamContext: Could not migrate memberInfo', migErr);
+            }
+          }
 
-              if (memberDoc.exists()) {
-                const data = memberDoc.data();
-                console.log('TeamContext: Member data fields:', Object.keys(data), 'contactPerson:', data.contactPerson);
-
-                // Hitta bästa namn att visa
-                const displayName = data.contactPerson || data.name || data.displayName || data.companyName || data.email?.split('@')[0] || 'Okänd';
-
-                return {
-                  id: memberId,
-                  displayName: displayName,
-                  email: data.email || '',
-                  companyName: data.companyName || ''
-                };
-              } else {
-                // Användardokument saknas - returnera minst ID:t
-                console.warn('TeamContext: User document NOT FOUND for', memberId);
-                return {
-                  id: memberId,
-                  displayName: 'Medlem (dokument saknas)',
-                  email: memberId, // Visa ID som fallback för debugging
-                  companyName: ''
-                };
-              }
-            } catch (err) {
-              console.error('TeamContext: Error fetching member', memberId, '- Error:', err.code, err.message);
+          const members = team.members.map(memberId => {
+            const info = memberInfo[memberId];
+            if (info) {
               return {
                 id: memberId,
-                displayName: 'Medlem (fel vid hämtning)',
-                email: memberId,
+                displayName: info.displayName || 'Medlem',
+                email: info.email || '',
+                companyName: info.companyName || ''
+              };
+            } else {
+              // Fallback för gamla team utan memberInfo
+              console.log('TeamContext: No memberInfo for', memberId, '- using fallback');
+              return {
+                id: memberId,
+                displayName: 'Medlem',
+                email: '',
                 companyName: ''
               };
             }
           });
 
-          const members = await Promise.all(memberPromises);
           setTeamMembers(members);
           saveToCache(CACHE_KEYS.TEAM_MEMBERS, members);
         }
@@ -239,12 +241,21 @@ export const TeamProvider = ({ children }) => {
       const teamId = `team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const teamCode = generateTeamCode();
 
+      // Skapa memberInfo för att undvika permission-problem vid läsning
+      const memberInfo = {
+        [currentUser.uid]: {
+          displayName: userProfile?.contactPerson || userProfile?.displayName || userProfile?.companyName || currentUser.email?.split('@')[0] || 'Användare',
+          email: currentUser.email || ''
+        }
+      };
+
       const teamData = {
         name: teamName,
         code: teamCode,
         password: password || null,
         ownerId: currentUser.uid,
         members: [currentUser.uid],
+        memberInfo: memberInfo,
         logoUrl: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -316,9 +327,16 @@ export const TeamProvider = ({ children }) => {
         return { success: false, error: 'Fel lösenord' };
       }
 
-      // Lägg till användaren i teamet
+      // Förbered medlemsinfo
+      const newMemberInfo = {
+        displayName: userProfile?.contactPerson || userProfile?.displayName || userProfile?.companyName || currentUser.email?.split('@')[0] || 'Användare',
+        email: currentUser.email || ''
+      };
+
+      // Lägg till användaren i teamet med medlemsinfo
       await updateDoc(doc(db, 'teams', team.id), {
         members: arrayUnion(currentUser.uid),
+        [`memberInfo.${currentUser.uid}`]: newMemberInfo,
         updatedAt: serverTimestamp()
       });
 
@@ -361,6 +379,7 @@ export const TeamProvider = ({ children }) => {
 
       await updateDoc(doc(db, 'teams', currentTeam.id), {
         members: updatedMembers,
+        [`memberInfo.${currentUser.uid}`]: deleteField(),
         updatedAt: serverTimestamp()
       });
 
@@ -411,14 +430,19 @@ export const TeamProvider = ({ children }) => {
 
       await updateDoc(doc(db, 'teams', currentTeam.id), {
         members: updatedMembers,
+        [`memberInfo.${memberId}`]: deleteField(),
         updatedAt: serverTimestamp()
       });
 
-      // Ta bort teamId från medlemmens profil
-      await updateDoc(doc(db, 'users', memberId), {
-        teamId: null,
-        updatedAt: serverTimestamp()
-      });
+      // Försök ta bort teamId från medlemmens profil (kan misslyckas pga permissions)
+      try {
+        await updateDoc(doc(db, 'users', memberId), {
+          teamId: null,
+          updatedAt: serverTimestamp()
+        });
+      } catch (permErr) {
+        console.warn('TeamContext: Could not update removed member profile (permission issue)', permErr);
+      }
 
       await fetchTeam(currentTeam.id);
 
@@ -698,6 +722,40 @@ export const TeamProvider = ({ children }) => {
     }
   };
 
+  // Uppdatera medlemsinfo i teamet (anropas när profil ändras)
+  const updateMemberInfo = async (displayName, email) => {
+    if (!currentUser || !currentTeam) {
+      return { success: false, error: 'Inget team' };
+    }
+
+    try {
+      console.log('TeamContext: Updating member info for', currentUser.uid);
+
+      await updateDoc(doc(db, 'teams', currentTeam.id), {
+        [`memberInfo.${currentUser.uid}`]: {
+          displayName: displayName || currentUser.email?.split('@')[0] || 'Användare',
+          email: email || currentUser.email || ''
+        },
+        updatedAt: serverTimestamp()
+      });
+
+      // Uppdatera lokal state
+      const updatedMembers = teamMembers.map(m =>
+        m.id === currentUser.uid
+          ? { ...m, displayName: displayName || m.displayName, email: email || m.email }
+          : m
+      );
+      setTeamMembers(updatedMembers);
+      saveToCache(CACHE_KEYS.TEAM_MEMBERS, updatedMembers);
+
+      console.log('TeamContext: Member info updated');
+      return { success: true };
+    } catch (err) {
+      console.error('TeamContext: Error updating member info:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   // Hämta team när användarprofil ändras - ALDRIG loading screen
   useEffect(() => {
     const loadTeams = async () => {
@@ -756,7 +814,8 @@ export const TeamProvider = ({ children }) => {
     updateTeamPassword,
     updateTeamName,
     transferOwnership,
-    deleteTeam
+    deleteTeam,
+    updateMemberInfo
   };
 
   return (
