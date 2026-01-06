@@ -169,31 +169,39 @@ export const TeamProvider = ({ children }) => {
         if (team.members && team.members.length > 0) {
           const memberPromises = team.members.map(async (memberId) => {
             try {
+              console.log('TeamContext: Fetching member document for:', memberId);
               const memberDoc = await getDoc(doc(db, 'users', memberId));
+              console.log('TeamContext: Member doc exists?', memberDoc.exists(), 'for', memberId);
+
               if (memberDoc.exists()) {
                 const data = memberDoc.data();
+                console.log('TeamContext: Member data fields:', Object.keys(data), 'contactPerson:', data.contactPerson);
+
+                // Hitta bästa namn att visa
+                const displayName = data.contactPerson || data.name || data.displayName || data.companyName || data.email?.split('@')[0] || 'Okänd';
+
                 return {
                   id: memberId,
-                  displayName: data.name || data.contactPerson || data.displayName || data.companyName || data.email || 'Okänd',
+                  displayName: displayName,
                   email: data.email || '',
                   companyName: data.companyName || ''
                 };
               } else {
                 // Användardokument saknas - returnera minst ID:t
-                console.log('TeamContext: User document not found for', memberId);
+                console.warn('TeamContext: User document NOT FOUND for', memberId);
                 return {
                   id: memberId,
-                  displayName: 'Medlem',
-                  email: '',
+                  displayName: 'Medlem (dokument saknas)',
+                  email: memberId, // Visa ID som fallback för debugging
                   companyName: ''
                 };
               }
             } catch (err) {
-              console.error('TeamContext: Error fetching member', memberId, err);
+              console.error('TeamContext: Error fetching member', memberId, '- Error:', err.code, err.message);
               return {
                 id: memberId,
-                displayName: 'Medlem',
-                email: '',
+                displayName: 'Medlem (fel vid hämtning)',
+                email: memberId,
                 companyName: ''
               };
             }
