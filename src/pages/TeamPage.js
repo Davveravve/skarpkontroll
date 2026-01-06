@@ -51,6 +51,7 @@ const TeamPage = () => {
   const [selectedNewOwner, setSelectedNewOwner] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showLeaveAsOwner, setShowLeaveAsOwner] = useState(false);
 
   const handleCreateTeam = async (e) => {
     e.preventDefault();
@@ -109,24 +110,85 @@ const TeamPage = () => {
   };
 
   const handleLeaveTeam = async () => {
-    confirmation.confirm({
-      title: 'Lämna team',
-      message: 'Är du säker på att du vill lämna teamet?',
-      confirmText: 'Ja, lämna',
-      cancelText: 'Avbryt',
-      confirmButtonClass: 'warning',
-      onConfirm: async () => {
-        setActionLoading(true);
-        const result = await leaveTeam();
-        setActionLoading(false);
+    // Om ägare - kolla om det finns andra medlemmar
+    if (isTeamOwner) {
+      const otherMembers = teamMembers.filter(m => m.id !== currentUser?.uid);
 
-        if (result.success) {
-          toast.success('Du har lämnat teamet');
-        } else {
-          toast.error(result.error);
-        }
+      if (otherMembers.length > 0) {
+        // Finns andra medlemmar - visa modal för att välja ny ägare
+        setSelectedNewOwner('');
+        setShowLeaveAsOwner(true);
+      } else {
+        // Enda medlemmen - bekräfta radering av teamet
+        confirmation.confirm({
+          title: 'Ta bort team',
+          message: 'Du är den enda medlemmen. Om du lämnar kommer teamet att tas bort. Är du säker?',
+          confirmText: 'Ja, ta bort teamet',
+          cancelText: 'Avbryt',
+          confirmButtonClass: 'danger',
+          onConfirm: async () => {
+            setActionLoading(true);
+            const result = await deleteTeam();
+            setActionLoading(false);
+
+            if (result.success) {
+              toast.success('Teamet har tagits bort');
+            } else {
+              toast.error(result.error);
+            }
+          }
+        });
       }
-    });
+    } else {
+      // Inte ägare - lämna normalt
+      confirmation.confirm({
+        title: 'Lämna team',
+        message: 'Är du säker på att du vill lämna teamet?',
+        confirmText: 'Ja, lämna',
+        cancelText: 'Avbryt',
+        confirmButtonClass: 'warning',
+        onConfirm: async () => {
+          setActionLoading(true);
+          const result = await leaveTeam();
+          setActionLoading(false);
+
+          if (result.success) {
+            toast.success('Du har lämnat teamet');
+          } else {
+            toast.error(result.error);
+          }
+        }
+      });
+    }
+  };
+
+  const handleLeaveAsOwner = async () => {
+    if (!selectedNewOwner) {
+      toast.error('Välj en ny ägare först');
+      return;
+    }
+
+    setTransferLoading(true);
+
+    // Först överför ägarskapret
+    const transferResult = await transferOwnership(selectedNewOwner);
+
+    if (!transferResult.success) {
+      setTransferLoading(false);
+      toast.error(transferResult.error || 'Kunde inte överföra ägarskap');
+      return;
+    }
+
+    // Sen lämna teamet
+    const leaveResult = await leaveTeam();
+    setTransferLoading(false);
+    setShowLeaveAsOwner(false);
+
+    if (leaveResult.success) {
+      toast.success('Ägarskap överfört och du har lämnat teamet');
+    } else {
+      toast.error(leaveResult.error || 'Kunde inte lämna teamet');
+    }
   };
 
   const handleRemoveMember = async (memberId, memberName) => {
@@ -936,21 +998,66 @@ const TeamPage = () => {
           </div>
         </div>
 
-        {/* Leave Team */}
-        {!isTeamOwner && (
-          <div className="team-page-actions">
-            <button
-              className="team-page-btn team-page-btn--danger team-page-btn--outline"
-              onClick={handleLeaveTeam}
-              disabled={actionLoading}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-              {actionLoading ? 'Lämnar...' : 'Lämna team'}
-            </button>
+        {/* Leave Team - visas för alla */}
+        <div className="team-page-actions">
+          <button
+            className="team-page-btn team-page-btn--danger team-page-btn--outline"
+            onClick={handleLeaveTeam}
+            disabled={actionLoading}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            {actionLoading ? 'Lämnar...' : 'Lämna team'}
+          </button>
+        </div>
+
+        {/* Modal för att välja ny ägare när ägare lämnar */}
+        {showLeaveAsOwner && (
+          <div className="team-page-modal-overlay" onClick={() => setShowLeaveAsOwner(false)}>
+            <div className="team-page-modal" onClick={e => e.stopPropagation()}>
+              <h3>Välj ny ägare</h3>
+              <p>Du måste välja en ny ägare innan du kan lämna teamet.</p>
+
+              <div className="team-page-owner-select">
+                {teamMembers
+                  .filter(m => m.id !== currentUser?.uid)
+                  .map(member => (
+                    <label key={member.id} className="team-page-owner-option">
+                      <input
+                        type="radio"
+                        name="newOwner"
+                        value={member.id}
+                        checked={selectedNewOwner === member.id}
+                        onChange={(e) => setSelectedNewOwner(e.target.value)}
+                      />
+                      <span className="team-page-owner-info">
+                        <span className="team-page-owner-name">{member.displayName}</span>
+                        {member.email && <span className="team-page-owner-email">{member.email}</span>}
+                      </span>
+                    </label>
+                  ))}
+              </div>
+
+              <div className="team-page-modal-actions">
+                <button
+                  className="team-page-btn team-page-btn--secondary"
+                  onClick={() => setShowLeaveAsOwner(false)}
+                  disabled={transferLoading}
+                >
+                  Avbryt
+                </button>
+                <button
+                  className="team-page-btn team-page-btn--danger"
+                  onClick={handleLeaveAsOwner}
+                  disabled={!selectedNewOwner || transferLoading}
+                >
+                  {transferLoading ? 'Överför och lämnar...' : 'Överför ägarskap och lämna'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
