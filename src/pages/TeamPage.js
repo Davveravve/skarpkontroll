@@ -378,6 +378,7 @@ const TeamPage = () => {
                     onChange={(e) => setTeamPassword(e.target.value)}
                     placeholder="Lämna tomt för öppet team"
                     disabled={actionLoading}
+                    autoComplete="off"
                   />
                   <span className="team-page-hint">Skydda teamet med lösenord</span>
                 </div>
@@ -406,6 +407,7 @@ const TeamPage = () => {
                     onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                     placeholder="XXXX XXXX XXXX"
                     disabled={actionLoading}
+                    autoComplete="off"
                   />
                 </div>
                 <div className="team-page-form-group">
@@ -416,6 +418,7 @@ const TeamPage = () => {
                     onChange={(e) => setJoinPassword(e.target.value)}
                     placeholder="Ange om teamet har lösenord"
                     disabled={actionLoading}
+                    autoComplete="off"
                   />
                 </div>
                 <button type="submit" className="team-page-btn team-page-btn--secondary" disabled={actionLoading}>

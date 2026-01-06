@@ -241,6 +241,7 @@ const OnboardingWizard = ({ onComplete, onSkip }) => {
                 onChange={(e) => setTeamPassword(e.target.value)}
                 placeholder="Lämna tomt för inget lösenord"
                 disabled={loading}
+                autoComplete="off"
               />
               <span className="form-hint">
                 Om du anger lösenord måste nya medlemmar ange det
@@ -294,6 +295,7 @@ const OnboardingWizard = ({ onComplete, onSkip }) => {
                 placeholder="T.ex. XDFS KLSP DSUT"
                 disabled={loading}
                 autoFocus
+                autoComplete="off"
               />
             </div>
 
@@ -308,6 +310,7 @@ const OnboardingWizard = ({ onComplete, onSkip }) => {
                 onChange={(e) => setJoinPassword(e.target.value)}
                 placeholder="Ange om teamet har lösenord"
                 disabled={loading}
+                autoComplete="off"
               />
             </div>
 
