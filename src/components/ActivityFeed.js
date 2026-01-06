@@ -158,16 +158,16 @@ const getActionText = (action, entityType) => {
       default: 'exporterade'
     },
     completed: {
-      control: 'slutforde kontroll',
-      default: 'slutforde'
+      control: 'slutförde kontroll',
+      default: 'slutförde'
     },
     joined: {
       team: 'gick med i teamet',
       default: 'gick med'
     },
     left: {
-      team: 'lamnade teamet',
-      default: 'lamnade'
+      team: 'lämnade teamet',
+      default: 'lämnade'
     },
     uploaded: {
       image: 'laddade upp bilder',
@@ -193,7 +193,7 @@ const formatTimestamp = (timestamp) => {
   if (diffMins < 1) return 'Just nu';
   if (diffMins < 60) return `${diffMins} min sedan`;
   if (diffHours < 24) return `${diffHours} tim sedan`;
-  if (diffDays === 1) return 'Igar';
+  if (diffDays === 1) return 'Igår';
   if (diffDays < 7) return `${diffDays} dagar sedan`;
 
   return date.toLocaleDateString('sv-SE', {
@@ -283,7 +283,7 @@ const ActivityFeed = ({ maxItems = 10, showHeader = true }) => {
       {showHeader && (
         <div className="activity-feed-header">
           <h3>Aktivitet</h3>
-          <span className="activity-count">{activities.length} handelser</span>
+          <span className="activity-count">{activities.length} händelser</span>
         </div>
       )}
       <div className="activity-feed-list">

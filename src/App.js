@@ -1,4 +1,4 @@
-// src/App.js - Med team-stod och onboarding - INGEN loading mellan sidor
+// src/App.js - Med team-stöd och onboarding - INGEN loading mellan sidor
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -46,7 +46,7 @@ function AppContent() {
   const { currentUser, loading: authLoading } = useAuth();
   const { hasTeam, currentTeam } = useTeam();
 
-  // Kolla om onboarding redan ar klar (fran cache)
+  // Kolla om onboarding redan är klar (från cache)
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
     try {
       return localStorage.getItem(ONBOARDING_CACHE_KEY) === 'true';
@@ -63,7 +63,7 @@ function AppContent() {
     } catch {}
   };
 
-  // Rensa onboarding cache om anvandaren loggar ut
+  // Rensa onboarding cache om användaren loggar ut
   useEffect(() => {
     if (!currentUser && !authLoading) {
       try {

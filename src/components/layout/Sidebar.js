@@ -103,7 +103,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
     }
   };
 
-  const userName = userProfile?.companyName || currentUser?.email?.split('@')[0] || 'Anvandare';
+  const userName = userProfile?.companyName || currentUser?.email?.split('@')[0] || 'Användare';
   const userInitial = userName.charAt(0).toUpperCase();
 
   return (

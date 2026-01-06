@@ -119,9 +119,9 @@ const Dashboard = () => {
         <div className="dashboard-no-team">
           <EmptyState
             type="noTeam"
-            title="Valj eller skapa ett team"
-            description="For att anvanda SkarpKontroll behover du vara med i ett team. Skapa ett nytt team eller ga med i ett befintligt med en inbjudningskod."
-            actionLabel="Ga till Team-sidan"
+            title="Välj eller skapa ett team"
+            description="För att använda SkarpKontroll behöver du vara med i ett team. Skapa ett nytt team eller gå med i ett befintligt med en inbjudningskod."
+            actionLabel="Gå till Team-sidan"
             actionLink="/team"
           />
         </div>
@@ -129,7 +129,7 @@ const Dashboard = () => {
     );
   }
 
-  const userName = userProfile?.companyName || currentTeam?.name || currentUser?.email?.split('@')[0] || 'Anvandare';
+  const userName = userProfile?.companyName || currentTeam?.name || currentUser?.email?.split('@')[0] || 'Användare';
 
   return (
     <div className="dashboard">
@@ -175,10 +175,10 @@ const Dashboard = () => {
           value={stats.activeControls}
           icon={StatsIcons.controls}
           color="orange"
-          subtitle="Pagaende"
+          subtitle="Pågående"
         />
         <StatsCard
-          title="Slutforda"
+          title="Slutförda"
           value={stats.completedControls}
           icon={StatsIcons.completed}
           color="green"
@@ -261,7 +261,7 @@ const Dashboard = () => {
                       </div>
                       <div className="control-item-status-wrapper">
                         <span className={`control-item-status control-item-status--${control.status || 'active'}`}>
-                          {control.status === 'completed' ? 'Slutford' : 'Pagaende'}
+                          {control.status === 'completed' ? 'Slutförd' : 'Pågående'}
                         </span>
                         <svg className="control-item-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="9 18 15 12 9 6"/>

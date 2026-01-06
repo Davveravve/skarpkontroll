@@ -727,7 +727,7 @@ const ControlView = () => {
       console.log('Image deleted successfully from Firebase Storage:', image.path);
     } catch (error) {
       console.error('Error deleting image from storage:', error);
-      // Inte kritiskt fel - fortsatt anda
+      // Inte kritiskt fel - fortsätt ändå
     }
   };
 
@@ -953,7 +953,7 @@ const ControlView = () => {
       confirmButtonClass: 'danger',
       onConfirm: async () => {
         try {
-          // Ta bort fran Firebase Storage
+          // Ta bort från Firebase Storage
           await deleteStorageImage(image);
 
           // Uppdatera anmärkningen i Firestore
