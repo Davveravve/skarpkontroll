@@ -163,6 +163,32 @@ export const TeamProvider = ({ children }) => {
 
       if (teamDoc.exists()) {
         const team = { ...teamDoc.data(), id: teamDoc.id };
+
+        // VIKTIGT: Kolla om användaren faktiskt är medlem i teamet
+        // (kan ha blivit borttagen av ägaren)
+        if (currentUser && team.members && !team.members.includes(currentUser.uid)) {
+          console.warn('TeamContext: User is not a member of this team - was probably removed');
+
+          // Rensa användarens teamId (de kan uppdatera sitt eget dokument)
+          try {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
+              teamId: null,
+              updatedAt: serverTimestamp()
+            });
+          } catch (err) {
+            console.warn('TeamContext: Could not clear teamId', err);
+          }
+
+          // Rensa lokal state
+          setCurrentTeam(null);
+          setTeamMembers([]);
+          saveToCache(CACHE_KEYS.CURRENT_TEAM, null);
+          saveToCache(CACHE_KEYS.TEAM_MEMBERS, []);
+
+          if (!silent) console.log('TeamContext: User removed from team, clearing state');
+          return null;
+        }
+
         setCurrentTeam(team);
         saveToCache(CACHE_KEYS.CURRENT_TEAM, team);
 
