@@ -104,6 +104,7 @@ export const AuthProvider = ({ children }) => {
       const userProfileData = {
         uid: user.uid,
         email: user.email,
+        name: displayName || contactPerson || '',
         displayName: displayName || '',
         contactPerson: contactPerson || '',
         phone: phone || '',
@@ -195,8 +196,14 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('AuthContext: Updating user profile...', profileData);
 
+      // Om displayName eller contactPerson uppdateras, uppdatera också name
+      const dataToUpdate = { ...profileData };
+      if (profileData.displayName || profileData.contactPerson) {
+        dataToUpdate.name = profileData.displayName || profileData.contactPerson;
+      }
+
       await updateDoc(doc(db, 'users', currentUser.uid), {
-        ...profileData,
+        ...dataToUpdate,
         updatedAt: serverTimestamp()
       });
 
