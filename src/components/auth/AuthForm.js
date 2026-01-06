@@ -13,8 +13,7 @@ const AuthForm = ({ defaultMode = 'login' }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    contactPerson: '',
-    phone: '',
+    name: '',
     agreeToTerms: false
   });
 
@@ -56,8 +55,8 @@ const AuthForm = ({ defaultMode = 'login' }) => {
     }
     
     if (!isLogin) {
-      if (!formData.contactPerson.trim()) {
-        setError('Kontaktperson krävs');
+      if (!formData.name.trim()) {
+        setError('Namn krävs');
         return false;
       }
 
@@ -88,9 +87,8 @@ const AuthForm = ({ defaultMode = 'login' }) => {
         const result = await register(
           formData.email,
           formData.password,
-          formData.contactPerson,
-          formData.contactPerson,
-          formData.phone
+          formData.name,
+          formData.name
         );
         
         if (result.success) {
@@ -103,8 +101,7 @@ const AuthForm = ({ defaultMode = 'login' }) => {
           setFormData({
             email: '',
             password: '',
-            contactPerson: '',
-            phone: '',
+            name: '',
             agreeToTerms: false
           });
         } else {
@@ -156,8 +153,7 @@ const AuthForm = ({ defaultMode = 'login' }) => {
     setFormData({
       email: '',
       password: '',
-      contactPerson: '',
-      phone: '',
+      name: '',
       agreeToTerms: false
     });
   };
@@ -322,72 +318,38 @@ const AuthForm = ({ defaultMode = 'login' }) => {
 
                 {/* Registration Only Fields */}
                 {!isLogin && (
-                  <>
-                    <div>
-                      <label style={{
-                        display: 'block',
-                        fontSize: 'var(--font-size-sm)',
-                        fontWeight: 'var(--font-weight-medium)',
-                        color: 'var(--color-text-primary)',
-                        marginBottom: 'var(--space-xs)'
-                      }}>
-                        Kontaktperson *
-                      </label>
-                      <input
-                        type="text"
-                        name="contactPerson"
-                        value={formData.contactPerson}
-                        onChange={handleChange}
-                        disabled={loading}
-                        placeholder="För- och efternamn"
-                        required
-                        style={{
-                          width: '100%',
-                          padding: 'var(--space-md)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: 'var(--radius-md)',
-                          fontSize: 'var(--font-size-base)',
-                          background: 'white',
-                          transition: 'border-color var(--transition-fast)',
-                          opacity: loading ? 0.7 : 1
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = 'var(--color-primary)'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
-                      />
-                    </div>
-
-                    <div style={{ gridColumn: windowWidth > 600 ? 'span 2' : 'span 1' }}>
-                      <label style={{
-                        display: 'block',
-                        fontSize: 'var(--font-size-sm)',
-                        fontWeight: 'var(--font-weight-medium)',
-                        color: 'var(--color-text-primary)',
-                        marginBottom: 'var(--space-xs)'
-                      }}>
-                        Telefonnummer
-                      </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        disabled={loading}
-                        placeholder="070-123 45 67"
-                        style={{
-                          width: '100%',
-                          padding: 'var(--space-md)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: 'var(--radius-md)',
-                          fontSize: 'var(--font-size-base)',
-                          background: 'white',
-                          transition: 'border-color var(--transition-fast)',
-                          opacity: loading ? 0.7 : 1
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = 'var(--color-primary)'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
-                      />
-                    </div>
-                  </>
+                  <div style={{ gridColumn: windowWidth > 600 ? 'span 2' : 'span 1' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: 'var(--font-size-sm)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      color: 'var(--color-text-primary)',
+                      marginBottom: 'var(--space-xs)'
+                    }}>
+                      Namn *
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      disabled={loading}
+                      placeholder="För- och efternamn"
+                      required
+                      style={{
+                        width: '100%',
+                        padding: 'var(--space-md)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: 'var(--font-size-base)',
+                        background: 'white',
+                        transition: 'border-color var(--transition-fast)',
+                        opacity: loading ? 0.7 : 1
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = 'var(--color-primary)'}
+                      onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
+                    />
+                  </div>
                 )}
               </div>
 
@@ -604,70 +566,6 @@ const AuthForm = ({ defaultMode = 'login' }) => {
                   </button>
                 </div>
               </form>
-            </div>
-          )}
-
-          {/* Features for Registration */}
-          {!isLogin && !showForgotPassword && (
-            <div style={{
-              marginTop: 'var(--space-xl)',
-              padding: 'var(--space-xl)',
-              background: 'var(--color-gray-50)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--color-border)'
-            }}>
-              <h3 style={{
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--color-text-primary)',
-                marginBottom: 'var(--space-lg)',
-                textAlign: 'center',
-                margin: '0 0 var(--space-lg) 0'
-              }}>
-                Vad ingår i provperioden?
-              </h3>
-              
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: windowWidth > 480 ? 'repeat(2, 1fr)' : '1fr',
-                gap: 'var(--space-lg)'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 'var(--space-md)'
-                }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    background: 'var(--color-success)',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
-                  </div>
-                  <div>
-                    <h4 style={{
-                      fontSize: 'var(--font-size-base)',
-                      fontWeight: 'var(--font-weight-medium)',
-                      margin: '0 0 var(--space-xs) 0'
-                    }}>
-                      Molnlagring
-                    </h4>
-                    <p style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-secondary)',
-                      margin: 0,
-                      lineHeight: 1.4
-                    }}>
-                      Säker backup av alla dina data
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
