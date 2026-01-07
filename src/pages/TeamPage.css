@@ -754,17 +754,27 @@ button.team-page-team:hover:not(:disabled) .team-page-team-arrow {
   font-size: 13px;
 }
 
-.team-page-logo-controls {
+.team-page-logo-controls,
+.team-page-logo-actions {
   display: flex;
   flex-direction: column;
   gap: 12px;
   flex: 1;
 }
 
+.team-page-logo-actions .team-page-btn {
+  width: auto;
+}
+
 @media (max-width: 640px) {
-  .team-page-logo-controls {
+  .team-page-logo-controls,
+  .team-page-logo-actions {
     width: 100%;
     align-items: stretch;
+  }
+
+  .team-page-logo-actions .team-page-btn {
+    width: 100%;
   }
 }
 

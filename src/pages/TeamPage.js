@@ -505,6 +505,84 @@ const TeamPage = () => {
       </header>
 
       <div className="team-page-content">
+        {/* Team Logo Card - Alla medlemmar kan ändra */}
+        <div className="team-page-card team-page-logo-card">
+          <div className="team-page-card-header">
+            <div>
+              <h2 className="team-page-card-title">Teamlogotyp</h2>
+              <p className="team-page-card-subtitle">Visas i PDF-protokoll istället för företagsnamn</p>
+            </div>
+          </div>
+          <div className="team-page-card-body">
+            <div className="team-page-logo-section">
+              <div className="team-page-logo-preview">
+                {currentTeam.logoUrl ? (
+                  <img
+                    src={currentTeam.logoUrl}
+                    alt="Teamlogotyp"
+                    className="team-page-logo-image"
+                  />
+                ) : (
+                  <div className="team-page-logo-placeholder">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Ingen logotyp</span>
+                  </div>
+                )}
+              </div>
+              <div className="team-page-logo-actions">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleLogoChange}
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  style={{ display: 'none' }}
+                />
+                <button
+                  className="team-page-btn team-page-btn--primary"
+                  onClick={handleLogoSelect}
+                  disabled={logoUploading}
+                >
+                  {logoUploading ? (
+                    <>
+                      <div className="team-page-btn-spinner"></div>
+                      Laddar upp...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      {currentTeam.logoUrl ? 'Byt logotyp' : 'Ladda upp logotyp'}
+                    </>
+                  )}
+                </button>
+                {currentTeam.logoUrl && (
+                  <button
+                    className="team-page-btn team-page-btn--danger team-page-btn--outline"
+                    onClick={handleLogoRemove}
+                    disabled={logoUploading}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Ta bort
+                  </button>
+                )}
+              </div>
+              <p className="team-page-logo-hint">
+                Stöds: JPG, PNG, GIF, WebP. Max 2MB.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Invite Card - Only for owners */}
         {isTeamOwner && (
           <div className="team-page-card team-page-invite-card">

@@ -877,12 +877,12 @@ const ControlView = () => {
         kontrollpunkter: kontrollpunkter.length
       });
 
-      // Hämta användarens profil
+      // Hämta profil för PDF - prioritera team-logga över användarens
       const pdfUserProfile = {
         companyName: userProfile?.companyName || currentTeam?.name || currentUser?.displayName || '',
         phone: userProfile?.phone || '',
         website: userProfile?.website || '',
-        logoUrl: userProfile?.logoUrl || null
+        logoUrl: currentTeam?.logoUrl || userProfile?.logoUrl || null
       };
 
       // Progress callback för PDF-generering
