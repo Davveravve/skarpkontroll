@@ -28,6 +28,13 @@
   color: #2d3748;
 }
 
+.company-logo {
+  max-width: 200px;
+  max-height: 80px;
+  margin-bottom: 12px;
+  filter: invert(1); /* Inverterar färger: vitt blir svart */
+}
+
 .inspection-name {
   font-size: 18px;
   color: #4a5568;

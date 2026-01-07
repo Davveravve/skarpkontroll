@@ -1,7 +1,7 @@
 // src/pages/PublicInspectionView.js - Publik sida för att visa anmärkningar
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import './PublicInspectionView.css';
 
@@ -20,6 +20,7 @@ const PublicInspectionView = () => {
   const [remarks, setRemarks] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [companyName, setCompanyName] = useState('');
+  const [logoUrl, setLogoUrl] = useState(null);
 
   useEffect(() => {
     loadInspectionData();
@@ -47,6 +48,26 @@ const PublicInspectionView = () => {
       const controlData = { id: controlDoc.id, ...controlDoc.data() };
       setControl(controlData);
       setCompanyName(controlData.teamName || controlData.companyName || '');
+
+      // Hämta team-logotyp om teamId finns
+      console.log('🖼️ PublicView: controlData.teamId =', controlData.teamId);
+      if (controlData.teamId) {
+        try {
+          const teamDoc = await getDoc(doc(db, 'teams', controlData.teamId));
+          console.log('🖼️ PublicView: teamDoc exists =', teamDoc.exists());
+          if (teamDoc.exists()) {
+            console.log('🖼️ PublicView: team data =', teamDoc.data());
+            if (teamDoc.data().logoUrl) {
+              console.log('🖼️ PublicView: Setting logoUrl =', teamDoc.data().logoUrl);
+              setLogoUrl(teamDoc.data().logoUrl);
+            }
+          }
+        } catch (err) {
+          console.error('🖼️ PublicView: Could not load team logo:', err);
+        }
+      } else {
+        console.log('🖼️ PublicView: No teamId on control');
+      }
 
       // Hämta platser
       const placesQuery = query(
@@ -213,7 +234,15 @@ const PublicInspectionView = () => {
       {/* Header */}
       <header className="public-header">
         <div className="header-content">
-          <h1 className="company-name">{companyName || 'Kontrollprotokoll'}</h1>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={companyName || 'Företagslogotyp'}
+              className="company-logo"
+            />
+          ) : (
+            <h1 className="company-name">{companyName || 'Kontrollprotokoll'}</h1>
+          )}
           <p className="inspection-name">{control?.name}</p>
           <p className="inspection-date">
             {control?.createdAt?.toDate ?
