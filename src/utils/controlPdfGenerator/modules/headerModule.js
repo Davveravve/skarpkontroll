@@ -75,32 +75,25 @@ export const renderHeader = async (pdfState, control, userProfile, kontrollpunkt
         // Placera logotypen på höger sida
         const logoX = pageWidth - margins.right - logoWidth;
         doc.addImage(logoImg.data, 'PNG', logoX, yPos, logoWidth, logoHeight);
-        
-        // Företagsinformation under logotypen på höger sida
+
+        // Kontaktinfo under logotypen (INTE företagsnamn - loggan ersätter det)
         const companyInfoX = pageWidth - margins.right;
-        let companyInfoY = yPos + logoHeight + 8;
-        
-        if (userProfile.companyName) {
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(12);
-          doc.text(userProfile.companyName, companyInfoX, companyInfoY, { align: 'right' });
-          companyInfoY += 6;
-        }
-        
+        let companyInfoY = yPos + logoHeight + 5;
+
         if (userProfile.phone) {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(10);
           doc.text(userProfile.phone, companyInfoX, companyInfoY, { align: 'right' });
           companyInfoY += 5;
         }
-        
+
         if (userProfile.website) {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(10);
           doc.text(userProfile.website, companyInfoX, companyInfoY, { align: 'right' });
         }
-        
-        yPos = Math.max(yPos + logoHeight + 12, companyInfoY + 6); // Reduced logo spacing
+
+        yPos = Math.max(yPos + logoHeight + 12, companyInfoY + 6);
       }
     } catch (logoError) {
       console.warn('Could not load logo:', logoError);
