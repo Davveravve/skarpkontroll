@@ -113,6 +113,68 @@ const resetStats = () => {
 // Hämta statistik
 export const getPdfStats = () => ({ ...pdfStats });
 
+// Ladda logotyp med header-bakgrundsfärg (för transparenta PNG:er)
+const loadLogoWithBackground = async (url, bgColor = [38, 50, 56]) => {
+  if (!url) return null;
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
+
+      img.onload = () => {
+        clearTimeout(timeout);
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // Max storlek för logotyp
+          const maxSize = 300;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = (height / width) * maxSize;
+              width = maxSize;
+            } else {
+              width = (width / height) * maxSize;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Fyll med bakgrundsfärgen FÖRST (för transparenta områden)
+          ctx.fillStyle = `rgb(${bgColor[0]}, ${bgColor[1]}, ${bgColor[2]})`;
+          ctx.fillRect(0, 0, width, height);
+
+          // Rita logotypen ovanpå
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Använd PNG för bästa kvalitet
+          const data = canvas.toDataURL('image/png');
+          resolve({ data, width, height });
+        } catch (e) {
+          reject(e);
+        }
+      };
+
+      img.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('Load failed'));
+      };
+
+      img.crossOrigin = 'anonymous';
+      img.src = url;
+    });
+  } catch (e) {
+    console.error('Could not load logo:', e);
+    return null;
+  }
+};
+
 // Optimerad bildladdning - mindre storlek för snabbare PDF
 const loadImageFromUrl = async (url, retries = 2) => {
   if (!url) return null;
@@ -315,14 +377,53 @@ export const generateControlPDF = async (control, places, allRemarks, userProfil
   doc.setFillColor(...colors.headerBg);
   doc.rect(0, 0, pageWidth, 55, 'F');
 
-  // Företagsnamn (vänster)
+  // Logotyp ELLER Företagsnamn (vänster)
   const companyName = userProfile.companyName || control?.teamName || '';
-  doc.setTextColor(...colors.white);
-  doc.setFontSize(22);
-  doc.setFont('Roboto', 'bold');
-  doc.text(companyName, margin, 28);
+  let logoLoaded = false;
 
-  // Kontrollnamn och datum (höger)
+  if (userProfile.logoUrl) {
+    try {
+      console.log('🖼️ PDF: Loading logo from:', userProfile.logoUrl);
+      // Använd loadLogoWithBackground för att fylla transparenta områden med header-färgen
+      const logoImg = await loadLogoWithBackground(userProfile.logoUrl, colors.headerBg);
+
+      if (logoImg && logoImg.data) {
+        // Beräkna logotypens storlek (max bredd 60, max höjd 35 för att passa i headern)
+        const maxLogoWidth = 60;
+        const maxLogoHeight = 35;
+
+        const logoAspectRatio = logoImg.width / logoImg.height;
+        let logoWidth = maxLogoWidth;
+        let logoHeight = logoWidth / logoAspectRatio;
+
+        if (logoHeight > maxLogoHeight) {
+          logoHeight = maxLogoHeight;
+          logoWidth = logoHeight * logoAspectRatio;
+        }
+
+        // Placera logotypen i headern (vänster sida, vertikalt centrerad)
+        const logoY = (55 - logoHeight) / 2; // Centrera vertikalt i 55px headern
+
+        // Använd PNG format för att behålla transparens
+        doc.addImage(logoImg.data, 'PNG', margin, logoY, logoWidth, logoHeight);
+        logoLoaded = true;
+        console.log('🖼️ PDF: Logo added successfully!');
+      }
+    } catch (logoError) {
+      console.error('🖼️ PDF: Failed to load logo:', logoError);
+    }
+  }
+
+  // Om ingen logotyp laddades, visa företagsnamnet istället
+  if (!logoLoaded) {
+    doc.setTextColor(...colors.white);
+    doc.setFontSize(22);
+    doc.setFont('Roboto', 'bold');
+    doc.text(companyName, margin, 28);
+  }
+
+  // Kontrollnamn och datum (höger) - måste vara vit text
+  doc.setTextColor(...colors.white);
   doc.setFontSize(11);
   doc.setFont('Roboto', 'bold');
   doc.text(control?.name || '', pageWidth - margin, 24, { align: 'right' });
