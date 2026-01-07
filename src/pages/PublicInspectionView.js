@@ -50,23 +50,15 @@ const PublicInspectionView = () => {
       setCompanyName(controlData.teamName || controlData.companyName || '');
 
       // Hämta team-logotyp om teamId finns
-      console.log('🖼️ PublicView: controlData.teamId =', controlData.teamId);
       if (controlData.teamId) {
         try {
           const teamDoc = await getDoc(doc(db, 'teams', controlData.teamId));
-          console.log('🖼️ PublicView: teamDoc exists =', teamDoc.exists());
-          if (teamDoc.exists()) {
-            console.log('🖼️ PublicView: team data =', teamDoc.data());
-            if (teamDoc.data().logoUrl) {
-              console.log('🖼️ PublicView: Setting logoUrl =', teamDoc.data().logoUrl);
-              setLogoUrl(teamDoc.data().logoUrl);
-            }
+          if (teamDoc.exists() && teamDoc.data().logoUrl) {
+            setLogoUrl(teamDoc.data().logoUrl);
           }
         } catch (err) {
-          console.error('🖼️ PublicView: Could not load team logo:', err);
+          console.log('Could not load team logo:', err);
         }
-      } else {
-        console.log('🖼️ PublicView: No teamId on control');
       }
 
       // Hämta platser
@@ -286,11 +278,7 @@ const PublicInspectionView = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="public-footer">
-        <p>Genererat med SkarpKontroll</p>
-      </footer>
-
+      
       {/* Bildmodal */}
       {selectedImage && (
         <div className="image-modal-overlay" onClick={() => setSelectedImage(null)}>
