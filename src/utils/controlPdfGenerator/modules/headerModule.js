@@ -53,10 +53,13 @@ export const renderHeader = async (pdfState, control, userProfile, kontrollpunkt
   console.log('📝 Header received instruction text:', instructionText?.length || 0, 'characters');
   
   // ===== LOGOTYP OCH FÖRETAGSINFORMATION =====
+  console.log('🖼️ headerModule: logoUrl =', userProfile.logoUrl);
+
   if (userProfile.logoUrl) {
     try {
-      console.log('Loading logo:', userProfile.logoUrl);
+      console.log('🖼️ headerModule: Loading logo from URL...');
       const logoImg = await loadImageFromUrl(userProfile.logoUrl);
+      console.log('🖼️ headerModule: Logo loaded successfully!', logoImg);
       
       if (logoImg) {
         // Beräkna logotypens storlek (max 50x30)
@@ -96,7 +99,8 @@ export const renderHeader = async (pdfState, control, userProfile, kontrollpunkt
         yPos = Math.max(yPos + logoHeight + 12, companyInfoY + 6);
       }
     } catch (logoError) {
-      console.warn('Could not load logo:', logoError);
+      console.error('🖼️ headerModule: FAILED to load logo!', logoError);
+      console.error('🖼️ headerModule: Falling back to company name');
       yPos = renderCompanyInfoOnly(doc, userProfile, yPos, margins);
     }
   } else {

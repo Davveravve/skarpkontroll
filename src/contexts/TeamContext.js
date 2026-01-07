@@ -479,14 +479,10 @@ export const TeamProvider = ({ children }) => {
     }
   };
 
-  // Uppdatera team-logotyp (endast ägare)
+  // Uppdatera team-logotyp (alla medlemmar kan ändra)
   const updateTeamLogo = async (file) => {
     if (!currentUser || !currentTeam) {
       return { success: false, error: 'Inget team' };
-    }
-
-    if (currentTeam.ownerId !== currentUser.uid) {
-      return { success: false, error: 'Endast ägaren kan ändra logotypen' };
     }
 
     try {
@@ -705,14 +701,10 @@ export const TeamProvider = ({ children }) => {
     }
   };
 
-  // Ta bort team-logotyp (endast ägare)
+  // Ta bort team-logotyp (alla medlemmar kan ta bort)
   const removeTeamLogo = async () => {
     if (!currentUser || !currentTeam) {
       return { success: false, error: 'Inget team' };
-    }
-
-    if (currentTeam.ownerId !== currentUser.uid) {
-      return { success: false, error: 'Endast ägaren kan ta bort logotypen' };
     }
 
     try {
