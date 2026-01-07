@@ -878,12 +878,20 @@ const ControlView = () => {
       });
 
       // Hämta profil för PDF - prioritera team-logga över användarens
+      console.log('🖼️ PDF Logo Debug:', {
+        teamLogoUrl: currentTeam?.logoUrl,
+        userLogoUrl: userProfile?.logoUrl,
+        currentTeam: currentTeam
+      });
+
       const pdfUserProfile = {
         companyName: userProfile?.companyName || currentTeam?.name || currentUser?.displayName || '',
         phone: userProfile?.phone || '',
         website: userProfile?.website || '',
         logoUrl: currentTeam?.logoUrl || userProfile?.logoUrl || null
       };
+
+      console.log('🖼️ Final pdfUserProfile:', pdfUserProfile);
 
       // Progress callback för PDF-generering
       const onProgress = (progress, message) => {
